@@ -3,7 +3,7 @@ AM_INIT_AUTOMAKE([nostdinc foreign])
 AC_CONFIG_MACRO_DIR([m4])
 LT_INIT([dlopen disable-static])
 
-AC_PROG_CXX
+AC_PROG_CC
 AC_PROG_INSTALL
 
 AM_PATH_WIRESHARK(1.10)
