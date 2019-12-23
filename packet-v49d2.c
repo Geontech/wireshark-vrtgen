@@ -2,6 +2,8 @@
 #include <epan/proto.h>
 #include <ws_symbol_export.h>
 
+#include "moduleinfo.h"
+
 typedef enum {
     SIGNAL_DATA = 0x0,
     SIGNAL_DATA_STREAM_ID = 0x1,

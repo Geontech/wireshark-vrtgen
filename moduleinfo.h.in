@@ -5,7 +5,7 @@
 #endif
 
 /* Name of package */
-#define PACKAGE "@PACKAGE@"
+#define PACKAGE "@PROJECT_NAME@"
 
 
 #ifdef VERSION
@@ -13,4 +13,4 @@
 #endif
 
 /* Version number of package */
-#define VERSION "@VERSION@"
+#define VERSION "@PROJECT_VERSION@"
