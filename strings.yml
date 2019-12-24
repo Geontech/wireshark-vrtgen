@@ -1,0 +1,28 @@
+enums:
+    PacketType:
+        SIGNAL_DATA: "Signal data packet without stream ID"
+        SIGNAL_DATA_STREAM_ID: "Signal data packet with stream ID"
+        EXTENSION_DATA: "Extension data packet without stream ID"
+        EXTENSION_DATA_STREAM_ID: "Extension data packet with stream ID"
+        CONTEXT: "Context packet"
+        EXTENSION_CONTEXT: "Extension context packet"
+        COMMAND: "Command packet"
+        EXTENSION_COMMAND: "Extension command packet"
+        RESERVED_8: "Reserved packet type (0x08)"
+        RESERVED_9: "Reserved packet type (0x09)"
+        RESERVED_10: "Reserved packet type (0x0A)"
+        RESERVED_11: "Reserved packet type (0x0B)"
+        RESERVED_12: "Reserved packet type (0x0C)"
+        RESERVED_13: "Reserved packet type (0x0D)"
+        RESERVED_14: "Reserved packet type (0x0E)"
+        RESERVED_15: "Reserved packet type (0x0F)"
+    TSI:
+        NONE: "None"
+        UTC: "UTC"
+        GPS: "GPS"
+        OTHER: "Other"
+    TSF:
+        NONE: "None"
+        SAMPLE_COUNT: "Sample count"
+        REAL_TIME: "Real time (picoseconds)"
+        FREE_RUNNING: "Free-running"
