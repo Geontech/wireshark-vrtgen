@@ -4,6 +4,8 @@
 
 #include "moduleinfo.h"
 
+#include "fixed.h"
+
 #include "enums.h"
 
 const gchar plugin_version[] = VERSION;
@@ -109,10 +111,17 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         offset += 8;
     }
 
+    cif0_enables cif0;
+    cif1_enables cif1;
     if (!is_data_packet(packet_type)) {
         tvbuff_t* cif0_buf = tvb_new_subset(tvb, offset, 4, -1);
-        dissect_cif0_enables(cif0_buf, prologue_tree, encoding);
+        dissect_cif0_enables(cif0_buf, prologue_tree, &cif0, encoding);
         offset += 4;
+        if (cif0.cif1_enable) {
+            tvbuff_t* cif1_buf = tvb_new_subset(tvb, offset, 4, -1);
+            dissect_cif1_enables(cif1_buf, prologue_tree, &cif1, encoding);
+            offset += 4;
+        }
     }
 
     packet_size -= offset;
@@ -123,7 +132,7 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     if (is_data_packet(packet_type)) {
         proto_tree_add_item(payload_tree, hf_v49d2_data, payload_buf, 0, -1, ENC_NA);
     } else {
-        proto_tree_add_item(payload_tree, hf_v49d2_data, payload_buf, 0, -1, ENC_NA);
+        offset += dissect_cif0_fields(payload_buf, payload_tree, &cif0, encoding);
     }
 
     return tvb_captured_length(tvb);

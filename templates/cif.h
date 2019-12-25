@@ -2,13 +2,21 @@
 #ifndef {{guard}}
 #define {{guard}}
 
+#include "fixed.h"
+
 /* Wireshark fields */
 static int hf_{{name}}_enables = -1;
 /*%- for field in fields %*/
-static int hf_{{name}}_enables_{{field.attr}} = -1;
+static int {{field.var}} = -1;
 /*%- endfor %*/
 
 static int ett_{{name}} = -1;
+
+typedef struct {
+/*%- for enable in enables %*/
+    int {{enable.attr}};
+/*%- endfor %*/
+} {{name}}_enables;
 
 static void register_{{name}}(int proto)
 {
@@ -20,9 +28,9 @@ static void register_{{name}}(int proto)
             NULL, HFILL }
         },
 /*%- for field in fields %*/
-        { &hf_{{name}}_enables_{{field.attr}},
-            { "{{field.name}}", "v49d2.{{name}}.{{field.attr}}_en",
-            FT_BOOLEAN, BASE_NONE,
+        { &{{field.var}},
+            { "{{field.name}}", "v49d2.{{name}}.{{field.abbrev}}",
+            {{field.type}}, {{field.base}},
             NULL, 0x00,
             NULL, HFILL }
         },
@@ -38,13 +46,36 @@ static void register_{{name}}(int proto)
 }
 
 static void
-dissect_{{name}}_enables(tvbuff_t *tvb, proto_tree *tree, guint encoding)
+dissect_{{name}}_enables(tvbuff_t *tvb, proto_tree *tree, {{name}}_enables *enables, guint encoding)
 {
     proto_item *item = proto_tree_add_item(tree, hf_{{name}}_enables, tvb, 0, 4, encoding);
     proto_tree *sub_tree = proto_item_add_subtree(item, ett_{{name}});
-/*%- for field in fields %*/
-    proto_tree_add_bits_item(sub_tree, hf_{{name}}_enables_{{field.attr}}, tvb, {{31 - field.offset}}, 1, encoding);
+/*%- for enable in enables %*/
+    proto_tree_add_bits_item(sub_tree, {{enable.var}}, tvb, {{enable.offset}}, 1, encoding);
+    enables->{{enable.attr}} = tvb_get_bits(tvb, {{enable.offset}}, 1, encoding);
 /*%- endfor %*/
+}
+
+static int
+dissect_{{name}}_fields(tvbuff_t *tvb, proto_tree *tree, {{name}}_enables *enables, guint encoding)
+{
+    int offset = 0;
+/*%- for field in dissectors %*/
+    if (enables->{{field.attr}}) {
+/*%-    if field.size < 4 %*/
+        offset += {{4 - field.size}};
+/*%-    endif %*/
+/*%-    if field.struct %*/
+/*%-    elif field.fixed %*/
+        gint{{field.bits}} val = get_int{{field.bits}}(tvb, offset, encoding);
+        proto_tree_add_double(tree, {{field.var}}, tvb, offset, {{field.size}}, fixed_to_double(val, {{field.radix}}));
+/*%-    else %*/
+        proto_tree_add_item(tree, {{field.var}}, tvb, offset, {{field.size}}, encoding);
+/*%-    endif %*/
+        offset += {{field.size}};
+    }
+/*%- endfor %*/
+    return offset;
 }
 
 #endif /* {{guard}} */

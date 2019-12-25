@@ -4,6 +4,7 @@ import os
 import jinja2
 import yaml
 
+from vrtgen.types import basic
 from vrtgen.types import enums
 from vrtgen.types import cif0
 from vrtgen.types import cif1
@@ -40,25 +41,89 @@ def split_capitals(name):
 def c_name(name):
     return '_'.join(split_capitals(name))
 
+def ws_type(dtype):
+    if issubclass(dtype, basic.FixedPointType):
+        if dtype.bits > 32:
+            return 'FT_DOUBLE'
+        return 'FT_FLOAT'
+    if issubclass(dtype, basic.IntegerType):
+        if dtype.signed:
+            sign = ''
+        else:
+            sign = 'U'
+        return 'FT_{}INT{}'.format(sign, dtype.bits)
+    return None
+
+def ws_base(dtype):
+    if dtype in (basic.Identifier16, basic.Identifier32, basic.StreamIdentifier):
+        return 'BASE_HEX'
+    if issubclass(dtype, basic.IntegerType):
+        return 'BASE_DEC'
+    return 'BASE_NONE'
+
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'templates')
+
+
+class CIFModule:
+    def __init__(self, name):
+        self.name = name
+        self.fields = []
+        self.enables = []
+        self.dissectors = []
+
+    def process_enable(self, enable):
+        hf_name = 'hf_{}_enables_{}'.format(self.name, enable.attr)
+        self.fields.append({
+            'var': hf_name,
+            'name': enable.name,
+            'abbrev': enable.attr + '_en',
+            'type': 'FT_BOOLEAN',
+            'base': 'BASE_NONE',
+        })
+
+        offset = 31 - enable.offset
+        self.enables.append({
+            'name': enable.name,
+            'attr': enable.attr,
+            'var': hf_name,
+            'offset': offset,
+        })
+
+    def process_field(self, field):
+        # Skip unimplemented fields and enables
+        if field.type is None or field.type.bits == 1:
+            return
+
+        if not ws_type(field.type):
+            return
+
+        hf_name = 'hf_{}_{}'.format(self.name, field.attr)
+        self.fields.append({
+            'var': hf_name,
+            'name': field.name,
+            'abbrev': field.attr,
+            'type': ws_type(field.type),
+            'base': ws_base(field.type)
+        })
+
+        dissector = {
+            'var': hf_name,
+            'name': field.name,
+            'attr': field.attr,
+            'size': field.type.bits // 8,
+        }
+        if issubclass(field.type, basic.FixedPointType):
+            dissector['fixed'] = True
+            dissector['bits'] = field.type.bits
+            dissector['radix'] = field.type.radix
+        self.dissectors.append(dissector)
 
 class PluginGenerator:
     def __init__(self):
         self.loader = jinja2.FileSystemLoader(TEMPLATE_PATH)
         self.env = jinja2.Environment(loader=self.loader, **JINJA_OPTIONS)
-        #self.strings = RawConfigParser()
-        #self.strings.optionxform = str
-        #self.strings.read('strings.cfg')
         with open('strings.yml', 'r') as fp:
             self.strings = yaml.safe_load(fp)
-
-    # def get_string(self, *path, fallback=None):
-    #     section = self.strings
-    #     value = fallback
-    #     for name in path:
-    #         child = section.get(name, None)
-    #         if not child:
-    #             return fallback
 
     def generate_enums(self, filename):
         template = self.env.get_template('enums.h')
@@ -87,19 +152,30 @@ class PluginGenerator:
             'values': [self.format_enum_value(enum, name, format_string, v) for v in enum],
         }
 
-    def generate_cif(self, cif, enables):
+    def generate_cif(self, name, cif):
         template = self.env.get_template('cif.h')
-        filename = '{}.h'.format(cif)
+        filename = '{}.h'.format(name)
+        fields = []
+
+        module = CIFModule(name)
+        for enable in cif.Enables.get_fields():
+            module.process_enable(enable)
+
+        for field in cif.get_fields():
+            module.process_field(field)
+
         with open(filename, 'w') as fp:
             fp.write(template.render({
-                'name': cif,
-                'fields': enables.get_fields()
+                'name': name,
+                'fields': module.fields,
+                'enables': module.enables,
+                'dissectors': module.dissectors,
             }))
 
     def generate(self):
         self.generate_enums('enums.h')
-        self.generate_cif('cif0', cif0.CIF0.Enables)
-        self.generate_cif('cif1', cif1.CIF1.Enables)
+        self.generate_cif('cif0', cif0.CIF0)
+        self.generate_cif('cif1', cif1.CIF1)
 
 if __name__ == '__main__':
     generator = PluginGenerator()
