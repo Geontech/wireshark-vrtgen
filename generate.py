@@ -8,6 +8,7 @@ from vrtgen.types import basic
 from vrtgen.types import enums
 from vrtgen.types import cif0
 from vrtgen.types import cif1
+from vrtgen.types import struct
 
 JINJA_OPTIONS = {
     'line_statement_prefix': '//%',
@@ -52,7 +53,7 @@ def ws_type(dtype):
         else:
             sign = 'U'
         return 'FT_{}INT{}'.format(sign, dtype.bits)
-    return None
+    return 'FT_NONE'
 
 def ws_base(dtype):
     if dtype in (basic.Identifier16, basic.Identifier32, basic.StreamIdentifier):
@@ -68,6 +69,7 @@ class CIFModule:
     def __init__(self, name):
         self.name = name
         self.fields = []
+        self.trees = []
         self.enables = []
         self.dissectors = []
 
@@ -94,9 +96,6 @@ class CIFModule:
         if field.type is None or field.type.bits == 1:
             return
 
-        if not ws_type(field.type):
-            return
-
         hf_name = 'hf_{}_{}'.format(self.name, field.attr)
         self.fields.append({
             'var': hf_name,
@@ -112,7 +111,12 @@ class CIFModule:
             'attr': field.attr,
             'size': field.type.bits // 8,
         }
-        if issubclass(field.type, basic.FixedPointType):
+        if issubclass(field.type, struct.Struct):
+            tree_var = 'ett_{}_{}'.format(self.name, field.attr)
+            self.trees.append(tree_var)
+            dissector['struct'] = True
+            dissector['tree'] = tree_var
+        elif issubclass(field.type, basic.FixedPointType):
             dissector['fixed'] = True
             dissector['bits'] = field.type.bits
             dissector['radix'] = field.type.radix
@@ -168,6 +172,7 @@ class PluginGenerator:
             fp.write(template.render({
                 'name': name,
                 'fields': module.fields,
+                'trees': module.trees,
                 'enables': module.enables,
                 'dissectors': module.dissectors,
             }))

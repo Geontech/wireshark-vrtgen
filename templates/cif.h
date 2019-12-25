@@ -11,6 +11,9 @@ static int {{field.var}} = -1;
 /*%- endfor %*/
 
 static int ett_{{name}} = -1;
+/*%- for tree in trees %*/
+static int {{tree}} = -1;
+/*%- endfor %*/
 
 typedef struct {
 /*%- for enable in enables %*/
@@ -39,6 +42,9 @@ static void register_{{name}}(int proto)
 
     static gint* ett[] = {
         &ett_{{name}},
+/*%- for tree in trees %*/
+        &{{tree}},
+/*%- endfor %*/
     };
 
     proto_register_field_array(proto, hf, array_length(hf));
@@ -60,12 +66,16 @@ static int
 dissect_{{name}}_fields(tvbuff_t *tvb, proto_tree *tree, {{name}}_enables *enables, guint encoding)
 {
     int offset = 0;
+    proto_item *struct_item;
+    proto_tree *struct_tree;
 /*%- for field in dissectors %*/
     if (enables->{{field.attr}}) {
 /*%-    if field.size < 4 %*/
         offset += {{4 - field.size}};
 /*%-    endif %*/
 /*%-    if field.struct %*/
+        struct_item = proto_tree_add_item(tree, {{field.var}}, tvb, offset, {{field.size}}, ENC_NA);
+        struct_tree = proto_item_add_subtree(struct_item, {{field.tree}});
 /*%-    elif field.fixed %*/
         gint{{field.bits}} val = get_int{{field.bits}}(tvb, offset, encoding);
         proto_tree_add_double(tree, {{field.var}}, tvb, offset, {{field.size}}, fixed_to_double(val, {{field.radix}}));
