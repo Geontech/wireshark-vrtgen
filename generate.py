@@ -179,7 +179,9 @@ class PluginGenerator:
     def __init__(self):
         self.loader = jinja2.FileSystemLoader(TEMPLATE_PATH)
         self.env = jinja2.Environment(loader=self.loader, **JINJA_OPTIONS)
-        with open('strings.yml', 'r') as fp:
+        basedir = os.path.dirname(__file__)
+        strings_file = os.path.join(basedir, 'strings.yml')
+        with open(strings_file, 'r') as fp:
             self.strings = yaml.safe_load(fp)
 
     def generate_enums(self, filename):
