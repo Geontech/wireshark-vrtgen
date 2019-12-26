@@ -47,23 +47,30 @@ def ws_type(dtype):
         if dtype.bits > 32:
             return 'FT_DOUBLE'
         return 'FT_FLOAT'
-    if issubclass(dtype, basic.IntegerType):
+    if issubclass(dtype, (basic.IntegerType, basic.NonZeroSize)):
         if dtype.signed:
             sign = ''
         else:
             sign = 'U'
-        return 'FT_{}INT{}'.format(sign, dtype.bits)
+        # Round up to next multiple of 8
+        bits = ((dtype.bits + 7) // 8) * 8
+        return 'FT_{}INT{}'.format(sign, bits)
+    if issubclass(dtype, basic.BooleanType):
+        return 'FT_BOOLEAN'
+    if issubclass(dtype, enums.BinaryEnum):
+        return 'FT_INT32'
     return 'FT_NONE'
 
 def ws_base(dtype):
     if dtype in (basic.Identifier16, basic.Identifier32, basic.StreamIdentifier):
         return 'BASE_HEX'
-    if issubclass(dtype, basic.IntegerType):
+    if issubclass(dtype, (basic.IntegerType, basic.NonZeroSize)):
+        return 'BASE_DEC'
+    if issubclass(dtype, enums.BinaryEnum):
         return 'BASE_DEC'
     return 'BASE_NONE'
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'templates')
-
 
 class CIFModule:
     def __init__(self, name):
@@ -75,13 +82,8 @@ class CIFModule:
 
     def process_enable(self, enable):
         hf_name = 'hf_{}_enables_{}'.format(self.name, enable.attr)
-        self.fields.append({
-            'var': hf_name,
-            'name': enable.name,
-            'abbrev': enable.attr + '_en',
-            'type': 'FT_BOOLEAN',
-            'base': 'BASE_NONE',
-        })
+        abbrev = enable.attr + '_en'
+        self._add_ws_field(hf_name, enable, abbrev=abbrev, ftype='FT_BOOLEAN', base='BASE_NONE')
 
         offset = 31 - enable.offset
         self.enables.append({
@@ -91,36 +93,68 @@ class CIFModule:
             'offset': offset,
         })
 
+    def _add_ws_field(self, var, field, abbrev=None, ftype=None, base=None):
+        if abbrev is None:
+            abbrev = '{}.{}'.format(self.name, field.attr)
+        if ftype is None:
+            ftype = ws_type(field.type)
+        if base is None:
+            base = ws_base(field.type)
+        self.fields.append({
+            'var': var,
+            'name': field.name,
+            'abbrev': abbrev,
+            'type': ftype,
+            'base': base,
+        })
+
     def process_field(self, field):
         # Skip unimplemented fields and enables
         if field.type is None or field.type.bits == 1:
             return
 
         hf_name = 'hf_{}_{}'.format(self.name, field.attr)
-        self.fields.append({
-            'var': hf_name,
-            'name': field.name,
-            'abbrev': field.attr,
-            'type': ws_type(field.type),
-            'base': ws_base(field.type)
-        })
+        self._add_ws_field(hf_name, field)
 
+        dissector = self._create_dissector(hf_name, field)
+        self.dissectors.append(dissector)
+
+    def _create_dissector(self, var, field):
         dissector = {
-            'var': hf_name,
+            'var': var,
             'name': field.name,
             'attr': field.attr,
             'size': field.type.bits // 8,
         }
+        if field.type.bits % 8:
+            dissector['packed'] = True
+            dissector['bits'] = field.type.bits
         if issubclass(field.type, struct.Struct):
             tree_var = 'ett_{}_{}'.format(self.name, field.attr)
             self.trees.append(tree_var)
-            dissector['struct'] = True
             dissector['tree'] = tree_var
+            dissector['fields'] = self.process_struct(var, field)
+            dissector['struct'] = True
         elif issubclass(field.type, basic.FixedPointType):
             dissector['fixed'] = True
             dissector['bits'] = field.type.bits
             dissector['radix'] = field.type.radix
-        self.dissectors.append(dissector)
+        return dissector
+
+    def process_struct(self, name, field):
+        dissectors = []
+        for subfield in field.type.get_fields():
+            abbrev = '{}.{}'.format(field.attr, subfield.attr)
+            hf_name = '{}_{}'.format(name, subfield.attr)
+            self._add_ws_field(hf_name, subfield, abbrev=abbrev)
+            dissector = self._create_dissector(hf_name, subfield)
+            offset = subfield.word * 32 + (31-subfield.offset)
+            dissector['bitoffset'] = offset
+            dissector['offset'] = offset // 8
+            dissectors.append(dissector)
+            offset += field.bits / 8
+
+        return dissectors
 
 class PluginGenerator:
     def __init__(self):
@@ -156,31 +190,25 @@ class PluginGenerator:
             'values': [self.format_enum_value(enum, name, format_string, v) for v in enum],
         }
 
-    def generate_cif(self, name, cif):
+    def generate_cif(self, name, cif, cif_fields):
         template = self.env.get_template('cif.h')
         filename = '{}.h'.format(name)
         fields = []
 
         module = CIFModule(name)
-        for enable in cif.Enables.get_fields():
+        for enable in cif_fields.Enables.get_fields():
             module.process_enable(enable)
 
-        for field in cif.get_fields():
+        for field in cif_fields.get_fields():
             module.process_field(field)
 
         with open(filename, 'w') as fp:
-            fp.write(template.render({
-                'name': name,
-                'fields': module.fields,
-                'trees': module.trees,
-                'enables': module.enables,
-                'dissectors': module.dissectors,
-            }))
+            fp.write(template.render(package='v49d2', cif=module))
 
     def generate(self):
         self.generate_enums('enums.h')
-        self.generate_cif('cif0', cif0.CIF0)
-        self.generate_cif('cif1', cif1.CIF1)
+        self.generate_cif('cif0', cif0, cif0.CIF0)
+        self.generate_cif('cif1', cif1, cif1.CIF1)
 
 if __name__ == '__main__':
     generator = PluginGenerator()
