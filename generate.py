@@ -73,12 +73,25 @@ def ws_base(dtype):
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'templates')
 
 class CIFModule:
-    def __init__(self, name):
+    def __init__(self, name, desc):
         self.name = name
         self.fields = []
         self.trees = []
         self.enables = []
         self.dissectors = []
+
+        # Create a field and subtree for the CIF enables
+        var = 'hf_{}_enables'.format(self.name)
+        self.fields.append({
+            'var': var,
+            'name': desc,
+            'abbrev': self.name,
+            'type': 'FT_UINT32',
+            'base': 'BASE_HEX',
+            'vals': 'NULL',
+            'flags': 0,
+        })
+        self.trees.append('ett_{}'.format(self.name))
 
     def process_enable(self, enable):
         hf_name = 'hf_{}_enables_{}'.format(self.name, enable.attr)
@@ -204,7 +217,8 @@ class PluginGenerator:
         filename = '{}.h'.format(name)
         fields = []
 
-        module = CIFModule(name)
+        cif_name = '{} {}'.format(name[:3].upper(), name[3:])
+        module = CIFModule(name, cif_name)
         for enable in cif_fields.Enables.get_fields():
             module.process_enable(enable)
 

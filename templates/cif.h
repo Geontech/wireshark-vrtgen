@@ -5,31 +5,18 @@
 #include "fixed.h"
 
 /* Wireshark fields */
-static int hf_{{cif.name}}_enables = -1;
 /*%- for field in cif.fields %*/
 static int {{field.var}} = -1;
 /*%- endfor %*/
 
-static int ett_{{cif.name}} = -1;
+/* Wireshark protocol subtrees */
 /*%- for tree in cif.trees %*/
 static int {{tree}} = -1;
 /*%- endfor %*/
 
-typedef struct {
-/*%- for enable in cif.enables %*/
-    int {{enable.attr}};
-/*%- endfor %*/
-} {{cif.name}}_enables;
-
 static void register_{{cif.name}}(int proto)
 {
    static hf_register_info hf[] = {
-        { &hf_{{cif.name}}_enables,
-            { "CIF 0", "{{package}}.{{cif.name}}",
-            FT_UINT32, BASE_HEX,
-            NULL, 0x00,
-            NULL, HFILL }
-        },
 /*%- for field in cif.fields %*/
         { &{{field.var}},
             { "{{field.name}}", "{{package}}.{{field.abbrev}}",
@@ -41,7 +28,6 @@ static void register_{{cif.name}}(int proto)
     };
 
     static gint* ett[] = {
-        &ett_{{cif.name}},
 /*%- for tree in cif.trees %*/
         &{{tree}},
 /*%- endfor %*/
@@ -50,6 +36,12 @@ static void register_{{cif.name}}(int proto)
     proto_register_field_array(proto, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
 }
+
+typedef struct {
+/*%- for enable in cif.enables %*/
+    int {{enable.attr}};
+/*%- endfor %*/
+} {{cif.name}}_enables;
 
 static void
 dissect_{{cif.name}}_enables(tvbuff_t *tvb, proto_tree *tree, {{cif.name}}_enables *enables, guint encoding)
