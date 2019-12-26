@@ -100,12 +100,18 @@ class CIFModule:
             ftype = ws_type(field.type)
         if base is None:
             base = ws_base(field.type)
+        if issubclass(field.type, enums.BinaryEnum):
+            vals = 'VALS({})'.format(c_name(field.type.__name__) + '_str')
+        else:
+            vals = 'NULL'
         self.fields.append({
             'var': var,
             'name': field.name,
             'abbrev': abbrev,
             'type': ftype,
             'base': base,
+            'vals': vals,
+            'flags': 0,
         })
 
     def process_field(self, field):
@@ -172,10 +178,13 @@ class PluginGenerator:
 
     def format_enum_value(self, enum, enum_name, fmt, value):
         section = self.strings['enums'].get(enum.__name__, {})
+        text = section.get(value.name, None)
+        if not text:
+            text = section.get('default', value.name).format(value=value.value, name=value.name)
         return {
             'label': '{}_{}'.format(enum_name.upper(), value.name),
             'value': fmt.format(value.value),
-            'string': section.get(value.name, value.name)
+            'string': text,
         }
 
     def format_enum(self, enum):

@@ -34,7 +34,7 @@ static void register_{{cif.name}}(int proto)
         { &{{field.var}},
             { "{{field.name}}", "{{package}}.{{field.abbrev}}",
             {{field.type}}, {{field.base}},
-            NULL, 0x00,
+            {{field.vals}}, 0x{{'%02x'|format(field.flags)}},
             NULL, HFILL }
         },
 /*%- endfor %*/
