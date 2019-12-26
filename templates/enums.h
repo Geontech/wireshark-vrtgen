@@ -7,9 +7,9 @@ typedef enum {
 /*%-    endfor %*/
 } {{enum.type}};
 
-const gchar* {{enum.strings}}[] = {
+const value_string {{enum.strings}}[] = {
 /*%-    for value in enum['values'] %*/
-    "{{value.string}}", /* {{value.label}} */
+    { {{value.label}}, "{{value.string}}" },
 /*%-    endfor %*/
 };
 /*% endfor %*/
