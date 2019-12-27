@@ -15,7 +15,6 @@ const gchar plugin_version[] = VERSION;
 
 static int proto_vrtgen = -1;
 
-static int hf_v49d2_stream_id = -1;
 static int hf_v49d2_integer_timestamp = -1;
 static int hf_v49d2_fractional_timestamp = -1;
 static int hf_v49d2_payload = -1;
@@ -28,6 +27,18 @@ static gint ett_v49d2_trailer = -1;
 
 // Some devices are known to ignore the big endian requirement of the spec
 static guint encoding = ENC_BIG_ENDIAN;
+
+static int has_stream_id(packet_type_e type)
+{
+    switch(type) {
+    case PACKET_TYPE_SIGNAL_DATA:
+    case PACKET_TYPE_EXTENSION_DATA:
+        return FALSE;
+    default:
+        return TRUE;
+    }
+
+}
 
 static int is_data_packet(packet_type_e type)
 {
@@ -68,16 +79,13 @@ static int
 dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
     int offset = 0;
-    packet_type_e packet_type;
-    int has_class_id;
-    int not_v49d0;
-    tsi_e tsi;
-    tsf_e tsf;
-    int has_stream_id;
+    header_t header;
     proto_item* tree_item;
     proto_tree *v49d2_tree;
     proto_tree* payload_tree;
-    int packet_size;
+    cif0_enables cif0;
+    cif1_enables cif1;
+    int payload_size;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "VITA 49.2");
     col_clear(pinfo->cinfo, COL_INFO);
@@ -85,56 +93,46 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     tree_item = proto_tree_add_item(tree, proto_vrtgen, tvb, 0, -1, ENC_NA);
     v49d2_tree = proto_item_add_subtree(tree_item, ett_v49d2);
 
-    packet_type = (packet_type_e) tvb_get_bits8(tvb, 0, 4);
-    has_class_id = tvb_get_bits8(tvb, 4, 1);
+    header.packet_type = (packet_type_e) tvb_get_bits8(tvb, 0, 4);
+    header.class_id_enable = tvb_get_bits8(tvb, 4, 1);
+    header.tsi = (tsi_e) tvb_get_bits8(tvb, 8, 2);
+    header.tsf = (tsf_e) tvb_get_bits8(tvb, 10, 2);
+    header.packet_size = 4 * tvb_get_bits(tvb, 16, 16, encoding);
 
-    tsi = (tsi_e) tvb_get_bits8(tvb, 8, 2);
-    tsf = (tsf_e) tvb_get_bits8(tvb, 10, 2);
+    col_add_str(pinfo->cinfo, COL_INFO, packet_type_str[header.packet_type].strptr);
 
-    col_add_str(pinfo->cinfo, COL_INFO, packet_type_str[packet_type].strptr);
-
-    if (is_data_packet(packet_type)) {
+    if (is_data_packet(header.packet_type)) {
         dissect_data_header(tvb, v49d2_tree, encoding);
-    } else if (is_context_packet(packet_type)) {
+    } else if (is_context_packet(header.packet_type)) {
         dissect_context_header(tvb, v49d2_tree, encoding);
-    } else if (is_command_packet(packet_type)) {
+    } else if (is_command_packet(header.packet_type)) {
         dissect_command_header(tvb, v49d2_tree, encoding);
     } else {
         // Fallback: dissect as base header
         dissect_header(tvb, v49d2_tree, encoding);
     }
-    packet_size = 4 * tvb_get_bits(tvb, 16, 16, encoding);
 
     offset = 4;
-    switch (packet_type) {
-    case PACKET_TYPE_SIGNAL_DATA:
-    case PACKET_TYPE_EXTENSION_DATA:
-        has_stream_id = FALSE;
-    default:
-        has_stream_id = TRUE;
-    }
-    if (has_stream_id) {
+    if (has_stream_id(header.packet_type)) {
         proto_tree_add_item(v49d2_tree, hf_v49d2_stream_id, tvb, offset, 4, encoding);
         offset += 4;
     }
-    if (has_class_id) {
+    if (header.class_id_enable) {
         tvbuff_t* class_id_buf = tvb_new_subset(tvb, offset, -1, -1);
         offset += dissect_class_id(class_id_buf, v49d2_tree, encoding);
     }
-    if (tsi != TSI_NONE) {
+    if (header.tsi != TSI_NONE) {
         proto_item* item = proto_tree_add_item(v49d2_tree, hf_v49d2_integer_timestamp, tvb, offset, 4, encoding);
-        proto_item_append_text(item, " [%s]", tsi_str[tsi].strptr);
+        proto_item_append_text(item, " [%s]", tsi_str[header.tsi].strptr);
         offset += 4;
     }
-    if (tsf != TSI_NONE) {
+    if (header.tsf != TSI_NONE) {
         proto_item* item = proto_tree_add_item(v49d2_tree, hf_v49d2_fractional_timestamp, tvb, offset, 8, encoding);
-        proto_item_append_text(item, " [%s]", tsf_str[tsf].strptr);
+        proto_item_append_text(item, " [%s]", tsf_str[header.tsf].strptr);
         offset += 8;
     }
 
-    cif0_enables cif0;
-    cif1_enables cif1;
-    if (!is_data_packet(packet_type)) {
+    if (!is_data_packet(header.packet_type)) {
         tvbuff_t* cif0_buf = tvb_new_subset(tvb, offset, 4, -1);
         dissect_cif0_enables(cif0_buf, v49d2_tree, &cif0, encoding);
         offset += 4;
@@ -145,12 +143,12 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         }
     }
 
-    packet_size -= offset;
+    payload_size = header.packet_size - offset;
     // if trailer subtract 1 more
-    tvbuff_t* payload_buf = tvb_new_subset(tvb, offset, packet_size, -1);
+    tvbuff_t* payload_buf = tvb_new_subset(tvb, offset, payload_size, -1);
     proto_item* payload_item = proto_tree_add_item(tree_item, hf_v49d2_payload, payload_buf, 0, -1, ENC_NA);
     payload_tree = proto_item_add_subtree(payload_item, ett_v49d2_payload);
-    if (is_data_packet(packet_type)) {
+    if (is_data_packet(header.packet_type)) {
         proto_tree_add_item(payload_tree, hf_v49d2_data, payload_buf, 0, -1, ENC_NA);
     } else {
         offset += dissect_cif0_fields(payload_buf, payload_tree, &cif0, encoding);
@@ -162,12 +160,6 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 void proto_register_vrtgen(void)
 {
     static hf_register_info hf[] = {
-        { &hf_v49d2_stream_id,
-            { "Stream ID", "v49d2.sid",
-            FT_UINT32, BASE_HEX,
-            NULL, 0x00,
-            NULL, HFILL }
-        },
         { &hf_v49d2_integer_timestamp,
             { "Integer timestamp", "v49d2.integer_timestamp",
             FT_UINT32, BASE_DEC,

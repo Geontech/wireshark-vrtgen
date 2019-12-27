@@ -38,6 +38,7 @@ set(template_files
     ${CMAKE_CURRENT_SOURCE_DIR}/templates/cif.h
     ${CMAKE_CURRENT_SOURCE_DIR}/templates/dissector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/templates/enums.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/templates/prologue.h
 )
 
 add_custom_command(

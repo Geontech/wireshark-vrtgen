@@ -149,6 +149,27 @@ class DissectorModule:
 
         return dissectors
 
+    def process_field(self, field):
+        hf_name = self._field_name(field.attr)
+        self._add_ws_field(hf_name, field)
+
+        dissector = self._create_dissector(hf_name, field)
+        self.dissectors.append(dissector)
+
+class PrologueModule(DissectorModule):
+    def __init__(self, protocol, name):
+        super().__init__(protocol, name)
+        self.structs = []
+
+    def _add_header_struct(self, name, structdef):
+        fields = []
+        for field in structdef.get_contents():
+            fields.append({
+                'type':'int',
+                'attr':field.attr,
+            })
+        self.structs.append({'name':name, 'fields':fields})
+
     def process_header(self, name, structdef):
         hf_name = self._field_name(name)
         item_name = 'V49.2 {}'.format(' '.join(split_capitals(structdef.__name__)))
@@ -176,12 +197,7 @@ class DissectorModule:
 
         self.dissectors.append(dissector)
 
-    def process_field(self, field):
-        hf_name = self._field_name(field.attr)
-        self._add_ws_field(hf_name, field)
-
-        dissector = self._create_dissector(hf_name, field)
-        self.dissectors.append(dissector)
+        self._add_header_struct(name, structdef)
 
 class CIFModule(DissectorModule):
     def __init__(self, protocol, name, desc):
@@ -276,20 +292,18 @@ class PluginGenerator:
             fp.write(template.render(module=module, cif=module))
 
     def generate_header(self):
-        template = self.env.get_template('dissector.h')
+        template = self.env.get_template('prologue.h')
         filename = 'prologue.h'
-        module = DissectorModule(self.protocol, 'prologue')
+        module = PrologueModule(self.protocol, 'prologue')
         module.process_header('header', prologue.Header)
         module.process_header('data_header', prologue.DataHeader)
         module.process_header('context_header', prologue.ContextHeader)
         module.process_header('command_header', prologue.CommandHeader)
+        module.process_field(prologue.Prologue.stream_id)
         module.process_field(prologue.Prologue.class_id)
 
         with open(filename, 'w') as fp:
-            fp.write('#ifndef PROLOGUE_H\n')
-            fp.write('#define PROLOGUE_H\n')
             fp.write(template.render(module=module, cif=module))
-            fp.write('\n#endif\n')
 
     def generate(self):
         self.generate_enums('enums.h')
