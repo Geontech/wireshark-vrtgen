@@ -11,6 +11,7 @@ const value_string {{enum.strings}}[] = {
 /*%-    for value in enum['values'] %*/
     { {{value.label}}, "{{value.string}}" },
 /*%-    endfor %*/
+    { 0, NULL }
 };
 /*% endfor %*/
 #endif /* ENUMS_H */

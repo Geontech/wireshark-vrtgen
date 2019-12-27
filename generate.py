@@ -186,12 +186,12 @@ class PluginGenerator:
 
     def generate_enums(self, filename):
         template = self.env.get_template('enums.h')
-        enum_types = [self.format_enum(en) for _, en in inspect.getmembers(enums, is_enum)]
+        enum_types = [self._format_enum(en) for _, en in inspect.getmembers(enums, is_enum)]
 
         with open(filename, 'w') as fp:
-            fp.write(template.render({'enums': enum_types}))
+            fp.write(template.render(enums=enum_types))
 
-    def format_enum_value(self, enum, enum_name, fmt, value):
+    def _format_enum_value(self, enum, enum_name, fmt, value):
         section = self.strings['enums'].get(enum.__name__, {})
         text = section.get(value.name, None)
         if not text:
@@ -202,7 +202,7 @@ class PluginGenerator:
             'string': text,
         }
 
-    def format_enum(self, enum):
+    def _format_enum(self, enum):
         name = c_name(enum.__name__)
         # Create a format string that returns a hex constant
         digits = int((enum.bits + 3) / 4)
@@ -211,7 +211,7 @@ class PluginGenerator:
             'name': name,
             'type': name + '_e',
             'strings': name + '_str',
-            'values': [self.format_enum_value(enum, name, format_string, v) for v in enum],
+            'values': [self._format_enum_value(enum, name, format_string, v) for v in enum],
         }
 
     def generate_cif(self, name, cif, cif_fields):
