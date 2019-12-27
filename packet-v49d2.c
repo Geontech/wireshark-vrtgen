@@ -15,11 +15,6 @@ const gchar plugin_version[] = VERSION;
 
 static int proto_vrtgen = -1;
 
-static int hf_v49d2_header = -1;
-static int hf_v49d2_tsi = -1;
-static int hf_v49d2_tsf = -1;
-static int hf_v49d2_packet_count = -1;
-static int hf_v49d2_packet_size = -1;
 static int hf_v49d2_stream_id = -1;
 static int hf_v49d2_integer_timestamp = -1;
 static int hf_v49d2_fractional_timestamp = -1;
@@ -28,7 +23,6 @@ static int hf_v49d2_data = -1;
 
 static gint ett_v49d2 = -1;
 static gint ett_v49d2_prologue = -1;
-static gint ett_v49d2_header = -1;
 static gint ett_v49d2_payload = -1;
 static gint ett_v49d2_trailer = -1;
 
@@ -81,7 +75,6 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     tsf_e tsf;
     int has_stream_id;
     proto_item* tree_item;
-    proto_item* header_item;
     proto_tree *v49d2_tree;
     proto_tree* payload_tree;
     int packet_size;
@@ -91,8 +84,6 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
     tree_item = proto_tree_add_item(tree, proto_vrtgen, tvb, 0, -1, ENC_NA);
     v49d2_tree = proto_item_add_subtree(tree_item, ett_v49d2);
-    header_item = proto_tree_add_item(v49d2_tree, hf_v49d2_header, tvb, 0, 4, encoding);
-    proto_tree *header_tree = proto_item_add_subtree(header_item, ett_v49d2_header);
 
     packet_type = (packet_type_e) tvb_get_bits8(tvb, 0, 4);
     has_class_id = tvb_get_bits8(tvb, 4, 1);
@@ -103,16 +94,14 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     col_add_str(pinfo->cinfo, COL_INFO, packet_type_str[packet_type].strptr);
 
     if (is_data_packet(packet_type)) {
-        dissect_data_header(tvb, header_tree, encoding);
+        dissect_data_header(tvb, v49d2_tree, encoding);
     } else if (is_context_packet(packet_type)) {
-        dissect_context_header(tvb, header_tree, encoding);
+        dissect_context_header(tvb, v49d2_tree, encoding);
     } else if (is_command_packet(packet_type)) {
-        dissect_command_header(tvb, header_tree, encoding);
+        dissect_command_header(tvb, v49d2_tree, encoding);
     } else {
-        proto_tree_add_bits_item(header_tree, hf_v49d2_tsi, tvb, 8, 2, encoding);
-        proto_tree_add_bits_item(header_tree, hf_v49d2_tsf, tvb, 10, 2, encoding);
-        proto_tree_add_bits_item(header_tree, hf_v49d2_packet_count, tvb, 12, 4, encoding);
-        proto_tree_add_item(header_tree, hf_v49d2_packet_size, tvb, 2, 2, encoding);
+        // Fallback: dissect as base header
+        dissect_header(tvb, v49d2_tree, encoding);
     }
     packet_size = 4 * tvb_get_bits(tvb, 16, 16, encoding);
 
@@ -173,39 +162,9 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 void proto_register_vrtgen(void)
 {
     static hf_register_info hf[] = {
-        { &hf_v49d2_header,
-            { "V49.2 header", "v49d2.hdr",
-            FT_UINT32, BASE_HEX,
-            NULL, 0x00,
-            NULL, HFILL }
-        },
         { &hf_v49d2_stream_id,
             { "Stream ID", "v49d2.sid",
             FT_UINT32, BASE_HEX,
-            NULL, 0x00,
-            NULL, HFILL }
-        },
-        { &hf_v49d2_tsi,
-            { "TSI", "v49d2.tsi",
-            FT_UINT8, BASE_DEC,
-            VALS(tsi_str), 0x00,
-            NULL, HFILL }
-        },
-        { &hf_v49d2_tsf,
-            { "TSF", "v49d2.tsf",
-            FT_UINT8, BASE_DEC,
-            VALS(tsf_str), 0x00,
-            NULL, HFILL }
-        },
-        { &hf_v49d2_packet_count,
-            { "Packet Count", "v49d2.packet_count",
-            FT_UINT8, BASE_DEC,
-            NULL, 0x00,
-            NULL, HFILL }
-        },
-        { &hf_v49d2_packet_size,
-            { "Packet Size", "v49d2.packet_size",
-            FT_UINT16, BASE_DEC,
             NULL, 0x00,
             NULL, HFILL }
         },
@@ -238,7 +197,6 @@ void proto_register_vrtgen(void)
     static gint* ett[] = {
         &ett_v49d2,
         &ett_v49d2_prologue,
-        &ett_v49d2_header,
         &ett_v49d2_payload,
         &ett_v49d2_trailer,
     };

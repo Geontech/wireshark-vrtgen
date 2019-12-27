@@ -150,6 +150,18 @@ class DissectorModule:
         return dissectors
 
     def process_header(self, name, structdef):
+        hf_name = self._field_name(name)
+        item_name = 'V49.2 {}'.format(' '.join(split_capitals(structdef.__name__)))
+        self.fields.append({
+            'var': hf_name,
+            'name': item_name,
+            'abbrev': self._get_abbrev(name),
+            'type': 'FT_UINT32',
+            'base': 'BASE_HEX',
+            'vals': 'NULL',
+            'flags': 0,
+        })
+
         dissector = {
             'var': self._field_name(name),
             'name': name,
@@ -267,6 +279,7 @@ class PluginGenerator:
         template = self.env.get_template('dissector.h')
         filename = 'prologue.h'
         module = DissectorModule(self.protocol, 'prologue')
+        module.process_header('header', prologue.Header)
         module.process_header('data_header', prologue.DataHeader)
         module.process_header('context_header', prologue.ContextHeader)
         module.process_header('command_header', prologue.CommandHeader)

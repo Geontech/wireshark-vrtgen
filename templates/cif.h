@@ -25,16 +25,12 @@ static int
 dissect_{{cif.name}}_fields(tvbuff_t *tvb, proto_tree *tree, {{cif.name}}_enables *enables, guint encoding)
 {
     int offset = 0;
-    proto_item *struct_item;
-    proto_tree *struct_tree;
     tvbuff_t *struct_buf;
 /*%- for field in cif.dissectors %*/
     if (enables->{{field.attr}}) {
 /*%-    if field.struct %*/
         struct_buf = tvb_new_subset(tvb, offset, {{field.size}}, -1);
-        struct_item = proto_tree_add_item(tree, {{field.var}}, tvb, offset, {{field.size}}, ENC_NA);
-        struct_tree = proto_item_add_subtree(struct_item, {{field.tree}});
-        offset += dissect_{{field.attr}}(struct_buf, struct_tree, encoding);
+        offset += dissect_{{field.attr}}(struct_buf, tree, encoding);
 /*%-    else %*/
 /*%-        if field.size < 4 %*/
         offset += {{4 - field.size}};
