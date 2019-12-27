@@ -14,7 +14,7 @@ static void
 dissect_{{cif.name}}_enables(tvbuff_t *tvb, proto_tree *tree, {{cif.name}}_enables *enables, guint encoding)
 {
     proto_item *item = proto_tree_add_item(tree, {{cif.enable_index}}, tvb, 0, 4, encoding);
-    proto_tree *sub_tree = proto_item_add_subtree(item, ett_{{cif.name}});
+    proto_tree *sub_tree = proto_item_add_subtree(item, {{cif.tree_index}});
 /*%- for enable in cif.enables %*/
     proto_tree_add_bits_item(sub_tree, {{enable.var}}, tvb, {{enable.offset}}, 1, encoding);
     enables->{{enable.attr}} = tvb_get_bits(tvb, {{enable.offset}}, 1, encoding);

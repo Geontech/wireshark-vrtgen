@@ -106,7 +106,7 @@ class DissectorModule:
         })
 
     def _add_tree(self, *names):
-        tree_var = '_'.join(('ett', *names))
+        tree_var = '_'.join(('ett', self.protocol, *names))
         self.trees.append(tree_var)
         return tree_var
 
@@ -199,7 +199,7 @@ class CIFModule(DissectorModule):
             'vals': 'NULL',
             'flags': 0,
         })
-        self._add_tree(self.name)
+        self.tree_index = self._add_tree(self.name)
 
     def process_enable(self, enable):
         hf_name = self._field_name(self.name, 'enables', enable.attr)
