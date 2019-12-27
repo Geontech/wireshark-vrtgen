@@ -73,7 +73,8 @@ def ws_base(dtype):
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'templates')
 
 class CIFModule:
-    def __init__(self, name, desc):
+    def __init__(self, protocol, name, desc):
+        self.protocol = protocol
         self.name = name
         self.fields = []
         self.trees = []
@@ -85,7 +86,7 @@ class CIFModule:
         self.fields.append({
             'var': var,
             'name': desc,
-            'abbrev': self.name,
+            'abbrev': self._get_abbrev(self.name),
             'type': 'FT_UINT32',
             'base': 'BASE_HEX',
             'vals': 'NULL',
@@ -93,9 +94,12 @@ class CIFModule:
         })
         self.trees.append('ett_{}'.format(self.name))
 
+    def _get_abbrev(self, *names):
+        return '.'.join((self.protocol, *names))
+
     def process_enable(self, enable):
         hf_name = 'hf_{}_enables_{}'.format(self.name, enable.attr)
-        abbrev = enable.attr + '_en'
+        abbrev = self._get_abbrev(enable.attr + '_en')
         self._add_ws_field(hf_name, enable, abbrev=abbrev, ftype='FT_BOOLEAN', base='BASE_NONE')
 
         offset = 31 - enable.offset
@@ -108,7 +112,7 @@ class CIFModule:
 
     def _add_ws_field(self, var, field, abbrev=None, ftype=None, base=None):
         if abbrev is None:
-            abbrev = '{}.{}'.format(self.name, field.attr)
+            abbrev = self._get_abbrev(self.name, field.attr)
         if ftype is None:
             ftype = ws_type(field.type)
         if base is None:
@@ -163,7 +167,7 @@ class CIFModule:
     def process_struct(self, name, field):
         dissectors = []
         for subfield in field.type.get_fields():
-            abbrev = '{}.{}'.format(field.attr, subfield.attr)
+            abbrev = self._get_abbrev(field.attr, subfield.attr)
             hf_name = '{}_{}'.format(name, subfield.attr)
             self._add_ws_field(hf_name, subfield, abbrev=abbrev)
             dissector = self._create_dissector(hf_name, subfield)
@@ -176,9 +180,10 @@ class CIFModule:
         return dissectors
 
 class PluginGenerator:
-    def __init__(self):
+    def __init__(self, protocol='v49d2'):
         self.loader = jinja2.FileSystemLoader(TEMPLATE_PATH)
         self.env = jinja2.Environment(loader=self.loader, **JINJA_OPTIONS)
+        self.protocol = protocol
         basedir = os.path.dirname(__file__)
         strings_file = os.path.join(basedir, 'strings.yml')
         with open(strings_file, 'r') as fp:
@@ -220,7 +225,7 @@ class PluginGenerator:
         fields = []
 
         cif_name = '{} {}'.format(name[:3].upper(), name[3:])
-        module = CIFModule(name, cif_name)
+        module = CIFModule(self.protocol, name, cif_name)
         for enable in cif_fields.Enables.get_fields():
             module.process_enable(enable)
 
@@ -228,7 +233,7 @@ class PluginGenerator:
             module.process_field(field)
 
         with open(filename, 'w') as fp:
-            fp.write(template.render(package='v49d2', cif=module))
+            fp.write(template.render(cif=module))
 
     def generate(self):
         self.generate_enums('enums.h')

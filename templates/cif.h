@@ -19,7 +19,7 @@ static void register_{{cif.name}}(int proto)
    static hf_register_info hf[] = {
 /*%- for field in cif.fields %*/
         { &{{field.var}},
-            { "{{field.name}}", "{{package}}.{{field.abbrev}}",
+            { "{{field.name}}", "{{field.abbrev}}",
             {{field.type}}, {{field.base}},
             {{field.vals}}, 0x{{'%02x'|format(field.flags)}},
             NULL, HFILL }
@@ -58,14 +58,15 @@ dissect_{{cif.name}}_enables(tvbuff_t *tvb, proto_tree *tree, {{cif.name}}_enabl
 static int
 dissect_{{struct.attr}}(tvbuff_t *tvb, proto_tree *tree, guint encoding)
 {
+/*%- for field in struct.fields if field.fixed %*/
+    gint{{field.bits}} {{field.attr}}_val;
+/*%- endfor %*/
 /*%- for field in struct.fields %*/
 /*%-    if field.packed %*/
     proto_tree_add_bits_item(tree, {{field.var}}, tvb, {{field.bitoffset}}, {{field.bits}}, encoding);
 /*%-    elif field.fixed %*/
-    {
-        gint{{field.bits}} val = get_int{{field.bits}}(tvb, {{field.offset}}, encoding);
-        proto_tree_add_double(tree, {{field.var}}, tvb, {{field.offset}}, {{field.size}}, fixed_to_double(val, {{field.radix}}));
-    }
+    {{field.attr}}_val = get_int{{field.bits}}(tvb, {{field.offset}}, encoding);
+    proto_tree_add_double(tree, {{field.var}}, tvb, {{field.offset}}, {{field.size}}, fixed_to_double({{field.attr}}_val, {{field.radix}}));
 /*%-    else %*/
     proto_tree_add_item(tree, {{field.var}}, tvb, {{field.offset}}, {{field.size}}, encoding);
 /*%-    endif %*/
@@ -83,21 +84,23 @@ dissect_{{cif.name}}_fields(tvbuff_t *tvb, proto_tree *tree, {{cif.name}}_enable
     tvbuff_t *struct_buf;
 /*%- for field in cif.dissectors %*/
     if (enables->{{field.attr}}) {
-/*%-    if field.size < 4 %*/
-        offset += {{4 - field.size}};
-/*%-    endif %*/
 /*%-    if field.struct %*/
         struct_buf = tvb_new_subset(tvb, offset, {{field.size}}, -1);
         struct_item = proto_tree_add_item(tree, {{field.var}}, tvb, offset, {{field.size}}, ENC_NA);
         struct_tree = proto_item_add_subtree(struct_item, {{field.tree}});
-        dissect_{{field.attr}}(struct_buf, struct_tree, encoding);
-/*%-    elif field.fixed %*/
+        offset += dissect_{{field.attr}}(struct_buf, struct_tree, encoding);
+/*%-    else %*/
+/*%-        if field.size < 4 %*/
+        offset += {{4 - field.size}};
+/*%-        endif %*/
+/*%-        if field.fixed %*/
         gint{{field.bits}} val = get_int{{field.bits}}(tvb, offset, encoding);
         proto_tree_add_double(tree, {{field.var}}, tvb, offset, {{field.size}}, fixed_to_double(val, {{field.radix}}));
-/*%-    else %*/
+/*%-        else %*/
         proto_tree_add_item(tree, {{field.var}}, tvb, offset, {{field.size}}, encoding);
-/*%-    endif %*/
+/*%-        endif %*/
         offset += {{field.size}};
+/*%-    endif %*/
     }
 /*%- endfor %*/
     return offset;
