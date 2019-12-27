@@ -104,14 +104,14 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     col_add_str(pinfo->cinfo, COL_INFO, packet_type_str[header.packet_type].strptr);
 
     if (is_data_packet(header.packet_type)) {
-        dissect_data_header(tvb, v49d2_tree, encoding);
+        dissect_data_header(tvb, v49d2_tree, offset, encoding);
     } else if (is_context_packet(header.packet_type)) {
-        dissect_context_header(tvb, v49d2_tree, encoding);
+        dissect_context_header(tvb, v49d2_tree, offset, encoding);
     } else if (is_command_packet(header.packet_type)) {
-        dissect_command_header(tvb, v49d2_tree, encoding);
+        dissect_command_header(tvb, v49d2_tree, offset, encoding);
     } else {
         /* Fallback: dissect as base header */
-        dissect_header(tvb, v49d2_tree, encoding);
+        dissect_header(tvb, v49d2_tree, offset, encoding);
     }
 
     offset = 4;
@@ -120,8 +120,7 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         offset += 4;
     }
     if (header.class_id_enable) {
-        tvbuff_t* class_id_buf = tvb_new_subset(tvb, offset, -1, -1);
-        offset += dissect_class_id(class_id_buf, v49d2_tree, encoding);
+        offset += dissect_class_id(tvb, v49d2_tree, offset, encoding);
     }
     if (header.tsi != TSI_NONE) {
         proto_item* item = proto_tree_add_item(v49d2_tree, hf_v49d2_integer_timestamp, tvb, offset, 4, encoding);
@@ -135,14 +134,17 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     }
 
     if (!is_data_packet(header.packet_type)) {
-        tvbuff_t* cif0_buf = tvb_new_subset(tvb, offset, 4, -1);
-        dissect_cif0_enables(cif0_buf, v49d2_tree, &cif0, encoding);
+        dissect_cif0_enables(tvb, v49d2_tree, &cif0, offset, encoding);
         offset += 4;
         if (cif0.cif1_enable) {
-            tvbuff_t* cif1_buf = tvb_new_subset(tvb, offset, 4, -1);
-            dissect_cif1_enables(cif1_buf, v49d2_tree, &cif1, encoding);
+            dissect_cif1_enables(tvb, v49d2_tree, &cif1, offset, encoding);
             offset += 4;
         }
+    }
+
+    if (is_command_packet(header.packet_type)) {
+        offset += dissect_cam(tvb, v49d2_tree, offset, encoding);
+        proto_tree_add_item(v49d2_tree, hf_v49d2_message_id, tvb, offset, 4, encoding);
     }
 
     payload_size = header.packet_size - offset;
@@ -153,10 +155,9 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     if (is_data_packet(header.packet_type)) {
         proto_tree_add_item(payload_tree, hf_v49d2_data, payload_buf, 0, -1, ENC_NA);
     } else {
-        int sub_offset = dissect_cif0_fields(payload_buf, payload_tree, &cif0, encoding);
+        int sub_offset = dissect_cif0_fields(payload_buf, payload_tree, &cif0, 0, encoding);
         if (cif0.cif1_enable) {
-            payload_buf = tvb_new_subset_remaining(payload_buf, sub_offset);
-            sub_offset = dissect_cif1_fields(payload_buf, payload_tree, &cif1, encoding);
+            sub_offset += dissect_cif1_fields(payload_buf, payload_tree, &cif1, sub_offset, encoding);
         }
     }
 

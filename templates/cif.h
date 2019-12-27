@@ -11,29 +11,27 @@ typedef struct {
 } {{cif.name}}_enables;
 
 static void
-dissect_{{cif.name}}_enables(tvbuff_t *tvb, proto_tree *tree, {{cif.name}}_enables *enables, guint encoding)
+dissect_{{cif.name}}_enables(tvbuff_t *tvb, proto_tree *tree, {{cif.name}}_enables *enables, int offset, guint encoding)
 {
     proto_item *item = proto_tree_add_item(tree, {{cif.enable_index}}, tvb, 0, 4, encoding);
     proto_tree *sub_tree = proto_item_add_subtree(item, {{cif.tree_index}});
 /*%- for enable in cif.enables %*/
-    proto_tree_add_bits_item(sub_tree, {{enable.var}}, tvb, {{enable.offset}}, 1, encoding);
-    enables->{{enable.attr}} = tvb_get_bits(tvb, {{enable.offset}}, 1, encoding);
+    proto_tree_add_bits_item(sub_tree, {{enable.var}}, tvb, (offset*8)+{{enable.offset}}, 1, encoding);
+    enables->{{enable.attr}} = tvb_get_bits(tvb, (offset*8)+{{enable.offset}}, 1, encoding);
 /*%- endfor %*/
 }
 
 static int
-dissect_{{cif.name}}_fields(tvbuff_t *tvb, proto_tree *tree, {{cif.name}}_enables *enables, guint encoding)
+dissect_{{cif.name}}_fields(tvbuff_t *tvb, proto_tree *tree, {{cif.name}}_enables *enables, int offset, guint encoding)
 {
-    int offset = 0;
-    tvbuff_t *struct_buf;
+    int start = offset;
 /*%- for field in cif.dissectors if field.fixed %*/
     gint{{field.bits}} {{field.attr}}_val;
 /*%- endfor %*/
 /*%- for field in cif.dissectors %*/
     if (enables->{{field.attr}}) {
 /*%-    if field.struct %*/
-        struct_buf = tvb_new_subset(tvb, offset, {{field.size}}, -1);
-        offset += dissect_{{field.attr}}(struct_buf, tree, encoding);
+        offset += dissect_{{field.attr}}(tvb, tree, offset, encoding);
 /*%-    else %*/
 /*%-        if field.size < 4 %*/
         offset += {{4 - field.size}};
@@ -48,7 +46,7 @@ dissect_{{cif.name}}_fields(tvbuff_t *tvb, proto_tree *tree, {{cif.name}}_enable
 /*%-    endif %*/
     }
 /*%- endfor %*/
-    return offset;
+    return offset - start;
 }
 
 #endif

@@ -5,9 +5,10 @@ import jinja2
 import yaml
 
 from vrtgen.types import basic
-from vrtgen.types import enums
 from vrtgen.types import cif0
 from vrtgen.types import cif1
+from vrtgen.types import control
+from vrtgen.types import enums
 from vrtgen.types import prologue
 from vrtgen.types import struct
 
@@ -63,7 +64,7 @@ def ws_type(dtype):
     return 'FT_NONE'
 
 def ws_base(dtype):
-    if dtype in (basic.Identifier16, basic.Identifier32, basic.StreamIdentifier):
+    if dtype in (basic.Identifier16, basic.Identifier32, basic.StreamIdentifier, control.MessageIdentifier):
         return 'BASE_HEX'
     if issubclass(dtype, (basic.IntegerType, basic.NonZeroSize)):
         return 'BASE_DEC'
@@ -301,6 +302,8 @@ class PluginGenerator:
         module.process_header('command_header', prologue.CommandHeader)
         module.process_field(prologue.Prologue.stream_id)
         module.process_field(prologue.Prologue.class_id)
+        module.process_field(control.CommandPrologue.cam)
+        module.process_field(control.CommandPrologue.message_id)
 
         with open(filename, 'w') as fp:
             fp.write(template.render(module=module, cif=module))

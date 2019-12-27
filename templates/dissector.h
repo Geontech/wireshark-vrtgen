@@ -35,7 +35,7 @@ static void register_{{module.name}}(int proto)
 /*%- for struct in module.dissectors if struct.struct %*/
 
 static int
-dissect_{{struct.attr}}(tvbuff_t *tvb, proto_tree *tree, guint encoding)
+dissect_{{struct.attr}}(tvbuff_t *tvb, proto_tree *tree, int offset, guint encoding)
 {
     proto_item *item;
     proto_tree *struct_tree;
@@ -43,17 +43,17 @@ dissect_{{struct.attr}}(tvbuff_t *tvb, proto_tree *tree, guint encoding)
     gint{{field.bits}} {{field.attr}}_val;
 /*%- endfor %*/
 
-    item = proto_tree_add_item(tree, {{struct.var}}, tvb, 0, {{struct.size}}, ENC_NA);
+    item = proto_tree_add_item(tree, {{struct.var}}, tvb, offset, {{struct.size}}, ENC_NA);
     struct_tree = proto_item_add_subtree(item, {{struct.tree}});
 
 /*%- for field in struct.fields %*/
 /*%-    if field.packed %*/
-    proto_tree_add_bits_item(struct_tree, {{field.var}}, tvb, {{field.bitoffset}}, {{field.bits}}, encoding);
+    proto_tree_add_bits_item(struct_tree, {{field.var}}, tvb, (offset*8) + {{field.bitoffset}}, {{field.bits}}, encoding);
 /*%-    elif field.fixed %*/
     {{field.attr}}_val = get_int{{field.bits}}(tvb, {{field.offset}}, encoding);
-    proto_tree_add_double(struct_tree, {{field.var}}, tvb, {{field.offset}}, {{field.size}}, fixed_to_double({{field.attr}}_val, {{field.radix}}));
+    proto_tree_add_double(struct_tree, {{field.var}}, tvb, offset + {{field.offset}}, {{field.size}}, fixed_to_double({{field.attr}}_val, {{field.radix}}));
 /*%-    else %*/
-    proto_tree_add_item(struct_tree, {{field.var}}, tvb, {{field.offset}}, {{field.size}}, encoding);
+    proto_tree_add_item(struct_tree, {{field.var}}, tvb, offset + {{field.offset}}, {{field.size}}, encoding);
 /*%-    endif %*/
 /*%- endfor %*/
     return {{struct.size}};
