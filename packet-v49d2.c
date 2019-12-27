@@ -48,6 +48,28 @@ static int is_data_packet(packet_type_e type)
     }
 }
 
+static int is_context_packet(packet_type_e type)
+{
+    switch(type) {
+    case PACKET_TYPE_CONTEXT:
+    case PACKET_TYPE_EXTENSION_CONTEXT:
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+
+static int is_command_packet(packet_type_e type)
+{
+    switch(type) {
+    case PACKET_TYPE_COMMAND:
+    case PACKET_TYPE_EXTENSION_COMMAND:
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
+
 static int
 dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
@@ -80,10 +102,18 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
     col_add_str(pinfo->cinfo, COL_INFO, packet_type_str[packet_type].strptr);
 
-    proto_tree_add_bits_item(header_tree, hf_v49d2_tsi, tvb, 8, 2, encoding);
-    proto_tree_add_bits_item(header_tree, hf_v49d2_tsf, tvb, 10, 2, encoding);
-    proto_tree_add_bits_item(header_tree, hf_v49d2_packet_count, tvb, 12, 4, encoding);
-    proto_tree_add_item(header_tree, hf_v49d2_packet_size, tvb, 2, 2, encoding);
+    if (is_data_packet(packet_type)) {
+        dissect_data_header(tvb, header_tree, encoding);
+    } else if (is_context_packet(packet_type)) {
+        dissect_context_header(tvb, header_tree, encoding);
+    } else if (is_command_packet(packet_type)) {
+        dissect_command_header(tvb, header_tree, encoding);
+    } else {
+        proto_tree_add_bits_item(header_tree, hf_v49d2_tsi, tvb, 8, 2, encoding);
+        proto_tree_add_bits_item(header_tree, hf_v49d2_tsf, tvb, 10, 2, encoding);
+        proto_tree_add_bits_item(header_tree, hf_v49d2_packet_count, tvb, 12, 4, encoding);
+        proto_tree_add_item(header_tree, hf_v49d2_packet_size, tvb, 2, 2, encoding);
+    }
     packet_size = 4 * tvb_get_bits(tvb, 16, 16, encoding);
 
     offset = 4;

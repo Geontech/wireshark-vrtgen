@@ -59,7 +59,7 @@ def ws_type(dtype):
     if issubclass(dtype, basic.BooleanType):
         return 'FT_BOOLEAN'
     if issubclass(dtype, enums.BinaryEnum):
-        return 'FT_INT32'
+        return 'FT_UINT32'
     return 'FT_NONE'
 
 def ws_base(dtype):
@@ -126,7 +126,7 @@ class DissectorModule:
         if issubclass(field.type, struct.Struct):
             tree_var = self._add_tree(field.attr)
             dissector['tree'] = tree_var
-            dissector['fields'] = self.process_struct(var, field)
+            dissector['fields'] = self.process_struct(field.attr, field.type)
             dissector['struct'] = True
         elif issubclass(field.type, basic.FixedPointType):
             dissector['fixed'] = True
@@ -134,20 +134,35 @@ class DissectorModule:
             dissector['radix'] = field.type.radix
         return dissector
 
-    def process_struct(self, name, field):
+    def process_struct(self, name, structdef):
         dissectors = []
-        for subfield in field.type.get_fields():
-            abbrev = self._get_abbrev(field.attr, subfield.attr)
-            hf_name = '{}_{}'.format(name, subfield.attr)
+        for subfield in structdef.get_fields():
+            abbrev = self._get_abbrev(name, subfield.attr)
+            hf_name = self._field_name(name, subfield.attr)
             self._add_ws_field(hf_name, subfield, abbrev=abbrev)
             dissector = self._create_dissector(hf_name, subfield)
             offset = subfield.word * 32 + (31-subfield.offset)
             dissector['bitoffset'] = offset
             dissector['offset'] = offset // 8
             dissectors.append(dissector)
-            offset += field.bits / 8
+            offset += structdef.bits / 8
 
         return dissectors
+
+    def process_header(self, name, structdef):
+        dissector = {
+            'var': self._field_name(name),
+            'name': name,
+            'attr': name,
+            'size': structdef.bits // 8,
+        }
+
+        tree_var = self._add_tree(name)
+        dissector['tree'] = tree_var
+        dissector['struct'] = True
+        dissector['fields'] = self.process_struct(name, structdef)
+
+        self.dissectors.append(dissector)
 
     def process_field(self, field):
         hf_name = self._field_name(field.attr)
@@ -252,6 +267,9 @@ class PluginGenerator:
         template = self.env.get_template('dissector.h')
         filename = 'prologue.h'
         module = DissectorModule(self.protocol, 'prologue')
+        module.process_header('data_header', prologue.DataHeader)
+        module.process_header('context_header', prologue.ContextHeader)
+        module.process_header('command_header', prologue.CommandHeader)
         module.process_field(prologue.Prologue.class_id)
 
         with open(filename, 'w') as fp:
