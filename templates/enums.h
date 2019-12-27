@@ -5,6 +5,7 @@ typedef enum {
 /*%-    for value in enum['values'] %*/
     {{value.label}} = {{value.value}},
 /*%-    endfor %*/
+    {{enum.name|upper}}_MAX = {{enum['values'][-1]['label']}}
 } {{enum.type}};
 
 const value_string {{enum.strings}}[] = {

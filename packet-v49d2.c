@@ -25,7 +25,7 @@ static gint ett_v49d2_prologue = -1;
 static gint ett_v49d2_payload = -1;
 static gint ett_v49d2_trailer = -1;
 
-// Some devices are known to ignore the big endian requirement of the spec
+/* Some devices are known to ignore the big endian requirement of the spec */
 static guint encoding = ENC_BIG_ENDIAN;
 
 static int has_stream_id(packet_type_e type)
@@ -86,6 +86,8 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     cif0_enables cif0;
     cif1_enables cif1;
     int payload_size;
+    tvbuff_t* payload_buf;
+    proto_item* payload_item;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "VITA 49.2");
     col_clear(pinfo->cinfo, COL_INFO);
@@ -108,7 +110,7 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     } else if (is_command_packet(header.packet_type)) {
         dissect_command_header(tvb, v49d2_tree, encoding);
     } else {
-        // Fallback: dissect as base header
+        /* Fallback: dissect as base header */
         dissect_header(tvb, v49d2_tree, encoding);
     }
 
@@ -144,14 +146,18 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     }
 
     payload_size = header.packet_size - offset;
-    // if trailer subtract 1 more
-    tvbuff_t* payload_buf = tvb_new_subset(tvb, offset, payload_size, -1);
-    proto_item* payload_item = proto_tree_add_item(tree_item, hf_v49d2_payload, payload_buf, 0, -1, ENC_NA);
+    /* TODO: if trailer subtract 1 more */
+    payload_buf = tvb_new_subset_length(tvb, offset, payload_size);
+    payload_item = proto_tree_add_item(tree_item, hf_v49d2_payload, payload_buf, 0, -1, ENC_NA);
     payload_tree = proto_item_add_subtree(payload_item, ett_v49d2_payload);
     if (is_data_packet(header.packet_type)) {
         proto_tree_add_item(payload_tree, hf_v49d2_data, payload_buf, 0, -1, ENC_NA);
     } else {
-        offset += dissect_cif0_fields(payload_buf, payload_tree, &cif0, encoding);
+        int sub_offset = dissect_cif0_fields(payload_buf, payload_tree, &cif0, encoding);
+        if (cif0.cif1_enable) {
+            payload_buf = tvb_new_subset_remaining(payload_buf, sub_offset);
+            sub_offset = dissect_cif1_fields(payload_buf, payload_tree, &cif1, encoding);
+        }
     }
 
     return tvb_captured_length(tvb);

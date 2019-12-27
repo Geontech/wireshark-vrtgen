@@ -26,6 +26,9 @@ dissect_{{cif.name}}_fields(tvbuff_t *tvb, proto_tree *tree, {{cif.name}}_enable
 {
     int offset = 0;
     tvbuff_t *struct_buf;
+/*%- for field in cif.dissectors if field.fixed %*/
+    gint{{field.bits}} {{field.attr}}_val;
+/*%- endfor %*/
 /*%- for field in cif.dissectors %*/
     if (enables->{{field.attr}}) {
 /*%-    if field.struct %*/
@@ -36,8 +39,8 @@ dissect_{{cif.name}}_fields(tvbuff_t *tvb, proto_tree *tree, {{cif.name}}_enable
         offset += {{4 - field.size}};
 /*%-        endif %*/
 /*%-        if field.fixed %*/
-        gint{{field.bits}} val = get_int{{field.bits}}(tvb, offset, encoding);
-        proto_tree_add_double(tree, {{field.var}}, tvb, offset, {{field.size}}, fixed_to_double(val, {{field.radix}}));
+        {{field.attr}}_val = get_int{{field.bits}}(tvb, offset, encoding);
+        proto_tree_add_double(tree, {{field.var}}, tvb, offset, {{field.size}}, fixed_to_double({{field.attr}}_val, {{field.radix}}));
 /*%-        else %*/
         proto_tree_add_item(tree, {{field.var}}, tvb, offset, {{field.size}}, encoding);
 /*%-        endif %*/

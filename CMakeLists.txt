@@ -56,6 +56,11 @@ add_custom_command(
 # once, as part of the vrtgen target
 add_custom_target(generate-headers DEPENDS ${generated_header_files})
 
+# Compile everything with most warnings
+add_compile_options(
+  "-Wall" "-Wpedantic" "-Wextra"
+)
+
 add_library(v49d2 MODULE)
 # Make module name "v49d2.so" instead of "libv49d2.so"
 set_target_properties(v49d2 PROPERTIES PREFIX "")
