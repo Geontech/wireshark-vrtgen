@@ -233,7 +233,7 @@ class PluginGenerator:
             module.process_field(field)
 
         with open(filename, 'w') as fp:
-            fp.write(template.render(cif=module))
+            fp.write(template.render(module=module, cif=module))
 
     def generate(self):
         self.generate_enums('enums.h')
