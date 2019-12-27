@@ -7,6 +7,9 @@
 #include "fixed.h"
 
 #include "enums.h"
+#include "cif0.h"
+#include "cif1.h"
+#include "prologue.h"
 
 const gchar plugin_version[] = VERSION;
 
@@ -28,9 +31,6 @@ static gint ett_v49d2_prologue = -1;
 static gint ett_v49d2_header = -1;
 static gint ett_v49d2_payload = -1;
 static gint ett_v49d2_trailer = -1;
-
-#include "cif0.h"
-#include "cif1.h"
 
 // Some devices are known to ignore the big endian requirement of the spec
 static guint encoding = ENC_BIG_ENDIAN;
@@ -61,7 +61,6 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     proto_item* tree_item;
     proto_item* header_item;
     proto_tree *v49d2_tree;
-    proto_tree* prologue_tree;
     proto_tree* payload_tree;
     int packet_size;
 
@@ -70,8 +69,7 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
     tree_item = proto_tree_add_item(tree, proto_vrtgen, tvb, 0, -1, ENC_NA);
     v49d2_tree = proto_item_add_subtree(tree_item, ett_v49d2);
-    prologue_tree = proto_item_add_subtree(v49d2_tree, ett_v49d2_prologue);
-    header_item = proto_tree_add_item(prologue_tree, hf_v49d2_header, tvb, 0, 4, encoding);
+    header_item = proto_tree_add_item(v49d2_tree, hf_v49d2_header, tvb, 0, 4, encoding);
     proto_tree *header_tree = proto_item_add_subtree(header_item, ett_v49d2_header);
 
     packet_type = (packet_type_e) tvb_get_bits8(tvb, 0, 4);
@@ -97,19 +95,20 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         has_stream_id = TRUE;
     }
     if (has_stream_id) {
-        proto_tree_add_item(prologue_tree, hf_v49d2_stream_id, tvb, offset, 4, encoding);
+        proto_tree_add_item(v49d2_tree, hf_v49d2_stream_id, tvb, offset, 4, encoding);
         offset += 4;
     }
     if (has_class_id) {
-        offset += 8;
+        tvbuff_t* class_id_buf = tvb_new_subset(tvb, offset, -1, -1);
+        offset += dissect_class_id(class_id_buf, v49d2_tree, encoding);
     }
     if (tsi != TSI_NONE) {
-        proto_item* item = proto_tree_add_item(prologue_tree, hf_v49d2_integer_timestamp, tvb, offset, 4, encoding);
+        proto_item* item = proto_tree_add_item(v49d2_tree, hf_v49d2_integer_timestamp, tvb, offset, 4, encoding);
         proto_item_append_text(item, " [%s]", tsi_str[tsi].strptr);
         offset += 4;
     }
     if (tsf != TSI_NONE) {
-        proto_item* item = proto_tree_add_item(prologue_tree, hf_v49d2_fractional_timestamp, tvb, offset, 8, encoding);
+        proto_item* item = proto_tree_add_item(v49d2_tree, hf_v49d2_fractional_timestamp, tvb, offset, 8, encoding);
         proto_item_append_text(item, " [%s]", tsf_str[tsf].strptr);
         offset += 8;
     }
@@ -118,11 +117,11 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     cif1_enables cif1;
     if (!is_data_packet(packet_type)) {
         tvbuff_t* cif0_buf = tvb_new_subset(tvb, offset, 4, -1);
-        dissect_cif0_enables(cif0_buf, prologue_tree, &cif0, encoding);
+        dissect_cif0_enables(cif0_buf, v49d2_tree, &cif0, encoding);
         offset += 4;
         if (cif0.cif1_enable) {
             tvbuff_t* cif1_buf = tvb_new_subset(tvb, offset, 4, -1);
-            dissect_cif1_enables(cif1_buf, prologue_tree, &cif1, encoding);
+            dissect_cif1_enables(cif1_buf, v49d2_tree, &cif1, encoding);
             offset += 4;
         }
     }
@@ -223,6 +222,7 @@ void proto_register_vrtgen(void)
     proto_register_field_array(proto_vrtgen, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
 
+    register_prologue(proto_vrtgen);
     register_cif0(proto_vrtgen);
     register_cif1(proto_vrtgen);
 }

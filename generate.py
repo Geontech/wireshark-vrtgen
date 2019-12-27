@@ -8,6 +8,7 @@ from vrtgen.types import basic
 from vrtgen.types import enums
 from vrtgen.types import cif0
 from vrtgen.types import cif1
+from vrtgen.types import prologue
 from vrtgen.types import struct
 
 JINJA_OPTIONS = {
@@ -72,47 +73,20 @@ def ws_base(dtype):
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'templates')
 
-class CIFModule:
-    def __init__(self, protocol, name, desc):
+class DissectorModule:
+    def __init__(self, protocol, name):
         self.protocol = protocol
         self.name = name
         self.fields = []
         self.trees = []
-        self.enables = []
         self.dissectors = []
-
-        # Create a field and subtree for the CIF enables
-        var = 'hf_{}_enables'.format(self.name)
-        self.fields.append({
-            'var': var,
-            'name': desc,
-            'abbrev': self._get_abbrev(self.name),
-            'type': 'FT_UINT32',
-            'base': 'BASE_HEX',
-            'vals': 'NULL',
-            'flags': 0,
-        })
-        self.trees.append('ett_{}'.format(self.name))
 
     def _get_abbrev(self, *names):
         return '.'.join((self.protocol, *names))
 
-    def process_enable(self, enable):
-        hf_name = 'hf_{}_enables_{}'.format(self.name, enable.attr)
-        abbrev = self._get_abbrev(enable.attr + '_en')
-        self._add_ws_field(hf_name, enable, abbrev=abbrev, ftype='FT_BOOLEAN', base='BASE_NONE')
-
-        offset = 31 - enable.offset
-        self.enables.append({
-            'name': enable.name,
-            'attr': enable.attr,
-            'var': hf_name,
-            'offset': offset,
-        })
-
     def _add_ws_field(self, var, field, abbrev=None, ftype=None, base=None):
         if abbrev is None:
-            abbrev = self._get_abbrev(self.name, field.attr)
+            abbrev = self._get_abbrev(field.attr)
         if ftype is None:
             ftype = ws_type(field.type)
         if base is None:
@@ -131,16 +105,13 @@ class CIFModule:
             'flags': 0,
         })
 
-    def process_field(self, field):
-        # Skip unimplemented fields and enables
-        if field.type is None or field.type.bits == 1:
-            return
+    def _add_tree(self, *names):
+        tree_var = '_'.join(('ett', *names))
+        self.trees.append(tree_var)
+        return tree_var
 
-        hf_name = 'hf_{}_{}'.format(self.name, field.attr)
-        self._add_ws_field(hf_name, field)
-
-        dissector = self._create_dissector(hf_name, field)
-        self.dissectors.append(dissector)
+    def _field_name(self, *names):
+        return '_'.join(('hf', self.protocol, *names))
 
     def _create_dissector(self, var, field):
         dissector = {
@@ -153,8 +124,7 @@ class CIFModule:
             dissector['packed'] = True
             dissector['bits'] = field.type.bits
         if issubclass(field.type, struct.Struct):
-            tree_var = 'ett_{}_{}'.format(self.name, field.attr)
-            self.trees.append(tree_var)
+            tree_var = self._add_tree(field.attr)
             dissector['tree'] = tree_var
             dissector['fields'] = self.process_struct(var, field)
             dissector['struct'] = True
@@ -178,6 +148,50 @@ class CIFModule:
             offset += field.bits / 8
 
         return dissectors
+
+    def process_field(self, field):
+        hf_name = self._field_name(field.attr)
+        self._add_ws_field(hf_name, field)
+
+        dissector = self._create_dissector(hf_name, field)
+        self.dissectors.append(dissector)
+
+class CIFModule(DissectorModule):
+    def __init__(self, protocol, name, desc):
+        super().__init__(protocol, name)
+        self.enables = []
+
+        # Create a field and subtree for the CIF enables
+        self.enable_index = self._field_name(self.name, 'enables')
+        self.fields.append({
+            'var': self.enable_index,
+            'name': desc,
+            'abbrev': self._get_abbrev(self.name),
+            'type': 'FT_UINT32',
+            'base': 'BASE_HEX',
+            'vals': 'NULL',
+            'flags': 0,
+        })
+        self._add_tree(self.name)
+
+    def process_enable(self, enable):
+        hf_name = self._field_name(self.name, 'enables', enable.attr)
+        abbrev = self._get_abbrev('enables', enable.attr)
+        self._add_ws_field(hf_name, enable, abbrev=abbrev, ftype='FT_BOOLEAN', base='BASE_NONE')
+
+        offset = 31 - enable.offset
+        self.enables.append({
+            'name': enable.name,
+            'attr': enable.attr,
+            'var': hf_name,
+            'offset': offset,
+        })
+
+    def process_field(self, field):
+        # Skip unimplemented fields and enables
+        if field.type is None or field.type.bits == 1:
+            return
+        super().process_field(field)
 
 class PluginGenerator:
     def __init__(self, protocol='v49d2'):
@@ -222,7 +236,6 @@ class PluginGenerator:
     def generate_cif(self, name, cif, cif_fields):
         template = self.env.get_template('cif.h')
         filename = '{}.h'.format(name)
-        fields = []
 
         cif_name = '{} {}'.format(name[:3].upper(), name[3:])
         module = CIFModule(self.protocol, name, cif_name)
@@ -235,10 +248,23 @@ class PluginGenerator:
         with open(filename, 'w') as fp:
             fp.write(template.render(module=module, cif=module))
 
+    def generate_header(self):
+        template = self.env.get_template('dissector.h')
+        filename = 'prologue.h'
+        module = DissectorModule(self.protocol, 'prologue')
+        module.process_field(prologue.Prologue.class_id)
+
+        with open(filename, 'w') as fp:
+            fp.write('#ifndef PROLOGUE_H\n')
+            fp.write('#define PROLOGUE_H\n')
+            fp.write(template.render(module=module, cif=module))
+            fp.write('\n#endif\n')
+
     def generate(self):
         self.generate_enums('enums.h')
         self.generate_cif('cif0', cif0, cif0.CIF0)
         self.generate_cif('cif1', cif1, cif1.CIF1)
+        self.generate_header()
 
 if __name__ == '__main__':
     generator = PluginGenerator()

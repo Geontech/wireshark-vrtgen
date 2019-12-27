@@ -30,11 +30,13 @@ set(generated_header_files
     ${CMAKE_CURRENT_BINARY_DIR}/enums.h
     ${CMAKE_CURRENT_BINARY_DIR}/cif0.h
     ${CMAKE_CURRENT_BINARY_DIR}/cif1.h
+    ${CMAKE_CURRENT_BINARY_DIR}/prologue.h
 )
 # List template files used to generate headers, used to trigger a re-generate
 # step if they are modified
 set(template_files
     ${CMAKE_CURRENT_SOURCE_DIR}/templates/cif.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/templates/dissector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/templates/enums.h
 )
 

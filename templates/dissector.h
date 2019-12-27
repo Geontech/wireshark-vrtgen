@@ -12,7 +12,7 @@ static int {{tree}} = -1;
 
 static void register_{{module.name}}(int proto)
 {
-   static hf_register_info hf[] = {
+    static hf_register_info hf[] = {
 /*%- for field in module.fields %*/
         { &{{field.var}},
             { "{{field.name}}", "{{field.abbrev}}",
