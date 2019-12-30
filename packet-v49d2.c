@@ -139,7 +139,11 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         offset += 4;
     }
 
-    if (!is_data_packet(header.packet_type)) {
+    /*
+     * Dump the CIF enables for context/command packets. In some cases (like
+     * execute ack packets) there may not be any enables.
+     */
+    if (!is_data_packet(header.packet_type) && (offset < header.packet_size)) {
         dissect_cif0_enables(tvb, v49d2_tree, &cif0, offset, encoding);
         offset += 4;
         if (cif0.cif1_enable) {
@@ -150,15 +154,18 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
     payload_size = header.packet_size - offset;
     /* TODO: if trailer subtract 1 more */
-    payload_buf = tvb_new_subset_length(tvb, offset, payload_size);
-    payload_item = proto_tree_add_item(tree_item, hf_v49d2_payload, payload_buf, 0, -1, ENC_NA);
-    payload_tree = proto_item_add_subtree(payload_item, ett_v49d2_payload);
-    if (is_data_packet(header.packet_type)) {
-        proto_tree_add_item(payload_tree, hf_v49d2_data, payload_buf, 0, -1, ENC_NA);
-    } else {
-        int sub_offset = dissect_cif0_fields(payload_buf, payload_tree, &cif0, 0, encoding);
-        if (cif0.cif1_enable) {
-            sub_offset += dissect_cif1_fields(payload_buf, payload_tree, &cif1, sub_offset, encoding);
+
+    if (payload_size > 0) {
+        payload_buf = tvb_new_subset_length(tvb, offset, payload_size);
+        payload_item = proto_tree_add_item(tree_item, hf_v49d2_payload, payload_buf, 0, -1, ENC_NA);
+        payload_tree = proto_item_add_subtree(payload_item, ett_v49d2_payload);
+        if (is_data_packet(header.packet_type)) {
+            proto_tree_add_item(payload_tree, hf_v49d2_data, payload_buf, 0, -1, ENC_NA);
+        } else {
+            int sub_offset = dissect_cif0_fields(payload_buf, payload_tree, &cif0, 0, encoding);
+            if (cif0.cif1_enable) {
+                sub_offset += dissect_cif1_fields(payload_buf, payload_tree, &cif1, sub_offset, encoding);
+            }
         }
     }
 
