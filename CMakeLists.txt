@@ -82,3 +82,12 @@ install(TARGETS v49d2
         DESTINATION ${PLUGINDIR}
         COMPONENT Libraries
 )
+
+# Packaging options
+set(CPACK_PACKAGE_NAME wireshark-v49d2)
+set(CPACK_PACKAGE_VENDOR "Geon Technologies, LLC")
+set(CPACK_RPM_PACKAGE_RELEASE_DIST ON)
+set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")
+set(CPACK_RPM_PACKAGE_REQUIRES "wireshark")
+set(CPACK_RPM_PACKAGE_SUMMARY "Wireshark VITA 49.2 dissector plugin using vrtgen to generate packet unpacking routines.")
+include(CPack)
