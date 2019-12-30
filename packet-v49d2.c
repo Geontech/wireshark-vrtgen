@@ -133,6 +133,12 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         offset += 8;
     }
 
+    if (is_command_packet(header.packet_type)) {
+        offset += dissect_cam(tvb, v49d2_tree, offset, encoding);
+        proto_tree_add_item(v49d2_tree, hf_v49d2_message_id, tvb, offset, 4, encoding);
+        offset += 4;
+    }
+
     if (!is_data_packet(header.packet_type)) {
         dissect_cif0_enables(tvb, v49d2_tree, &cif0, offset, encoding);
         offset += 4;
@@ -140,11 +146,6 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
             dissect_cif1_enables(tvb, v49d2_tree, &cif1, offset, encoding);
             offset += 4;
         }
-    }
-
-    if (is_command_packet(header.packet_type)) {
-        offset += dissect_cam(tvb, v49d2_tree, offset, encoding);
-        proto_tree_add_item(v49d2_tree, hf_v49d2_message_id, tvb, offset, 4, encoding);
     }
 
     payload_size = header.packet_size - offset;
