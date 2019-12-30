@@ -1,6 +1,9 @@
 stages:
     - package
 
+variables:
+    GIT_SUBMODULE_STRATEGY: normal
+
 rpmbuild:
     stage: package
     image: centos:7
