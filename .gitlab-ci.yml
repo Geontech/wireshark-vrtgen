@@ -1,0 +1,26 @@
+stages:
+    - package
+
+variables:
+    GIT_SUBMODULE_STRATEGY: normal
+
+rpmbuild:
+    stage: package
+    image: centos:7
+    before_script:
+        - yum install -y epel-release
+        - yum install -y rpm-build cmake3 gcc-c++ make
+        - yum install -y python3 python36-yaml wireshark wireshark-devel
+        # Install vrtgen as an RPM (as opposed to using pip)
+        - pushd vrtgen
+        - python3 setup.py bdist_rpm
+        - yum install -y dist/vrtgen-*.noarch.rpm
+        - popd
+    script:
+        - cmake3 -B dist
+        - cd dist
+        - if [ -z "$CI_COMMIT_TAG" ]; then export CPACK_ARGS="-D CPACK_RPM_PACKAGE_RELEASE=0.$CI_PIPELINE_ID"; fi
+        - cpack3 -G RPM $CPACK_ARGS
+    artifacts:
+        paths:
+            - dist/*.rpm

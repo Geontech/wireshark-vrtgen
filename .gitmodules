@@ -1,0 +1,3 @@
+[submodule "vrtgen"]
+	path = vrtgen
+	url = ../vrtgen.git
