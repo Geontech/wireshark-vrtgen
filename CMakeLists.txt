@@ -17,7 +17,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 cmake_minimum_required(VERSION 3.13)
-project(wireshark-vrtgen VERSION 0.1.0 LANGUAGES C)
+project(wireshark-vrtgen VERSION 0.2.0 LANGUAGES C)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(WIRESHARK REQUIRED IMPORTED_TARGET "wireshark >= 1.10")
