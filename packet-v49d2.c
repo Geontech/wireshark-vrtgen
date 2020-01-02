@@ -95,8 +95,8 @@ static int is_command_packet(packet_type_e type)
     }
 }
 
-static int
-dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+static void
+dissect_v49d2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
     int offset = 0;
     int packet_size;
@@ -173,18 +173,17 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     }
 
     payload_size = packet_size - offset;
+    /* Exclude data packet trailer, if present, from the payload */
+    if (has_trailer) {
+        payload_size -= 4;
+    }
+
     if (payload_size > 0) {
-        /* Exclude data packet trailer, if present, from the payload */
-        if (has_trailer) {
-            payload_size -= 4;
-        }
         payload_item = proto_tree_add_item(tree_item, hf_v49d2_payload, tvb, offset, payload_size, ENC_NA);
         payload_tree = proto_item_add_subtree(payload_item, ett_v49d2_payload);
         if (is_data_packet(header.packet_type)) {
             proto_tree_add_item(payload_tree, hf_v49d2_data, tvb, offset, payload_size, ENC_NA);
-            if (has_trailer) {
-                dissect_trailer(tvb, v49d2_tree, offset+payload_size, encoding);
-            }
+            offset += payload_size;
         } else {
             offset += dissect_cif0_fields(tvb, payload_tree, &cif0, offset, encoding);
             if (cif0.cif1_enable) {
@@ -193,7 +192,9 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         }
     }
 
-    return tvb_captured_length(tvb);
+    if (has_trailer) {
+        dissect_trailer(tvb, v49d2_tree, offset, encoding);
+    }
 }
 
 void proto_register_vrtgen(void)
@@ -250,6 +251,6 @@ void proto_reg_handoff_vrtgen(void)
 {
     static dissector_handle_t vrtgen_handle;
 
-    vrtgen_handle = new_create_dissector_handle(dissect_vrtgen, proto_vrtgen);
+    vrtgen_handle = create_dissector_handle(dissect_v49d2, proto_vrtgen);
     dissector_add_uint("udp.port", 13000, vrtgen_handle);
 }
