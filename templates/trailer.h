@@ -18,27 +18,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef PROLOGUE_H
-#define PROLOGUE_H
+#ifndef TRAILER_H
+#define TRAILER_H
 
 /*% include "dissector.h" %*/
-
-/*%- for struct in module.structs %*/
-
-typedef struct {
-/*%-    for field in struct.fields %*/
-    {{field.type}} {{field.attr}};
-/*%-    endfor %*/
-} {{struct.name}}_t;
-/*%-    if struct.name == 'header' %*/
-
-static void unpack_{{struct.name}}(tvbuff_t *tvb, int offset, {{struct.name}}_t *header, int encoding)
-{
-/*%-        for field in struct.fields %*/
-    header->{{field.attr}} = tvb_get_bits(tvb, (offset*8) + {{field.offset}}, {{field.bits}}, encoding);
-/*%-        endfor %*/
-}
-/*%-    endif %*/
-/*%- endfor %*/
 
 #endif

@@ -30,6 +30,7 @@
 #include "cif0.h"
 #include "cif1.h"
 #include "prologue.h"
+#include "trailer.h"
 
 const gchar plugin_version[] = VERSION;
 
@@ -43,7 +44,6 @@ static int hf_v49d2_data = -1;
 static gint ett_v49d2 = -1;
 static gint ett_v49d2_prologue = -1;
 static gint ett_v49d2_payload = -1;
-static gint ett_v49d2_trailer = -1;
 
 /* Some devices are known to ignore the big endian requirement of the spec */
 static guint encoding = ENC_BIG_ENDIAN;
@@ -99,14 +99,15 @@ static int
 dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
     int offset = 0;
+    int packet_size;
     header_t header;
+    int has_trailer = 0;
     proto_item* tree_item;
     proto_tree *v49d2_tree;
     proto_tree* payload_tree;
     cif0_enables cif0;
     cif1_enables cif1;
     int payload_size;
-    tvbuff_t* payload_buf;
     proto_item* payload_item;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "VITA 49.2");
@@ -115,16 +116,15 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     tree_item = proto_tree_add_item(tree, proto_vrtgen, tvb, 0, -1, ENC_NA);
     v49d2_tree = proto_item_add_subtree(tree_item, ett_v49d2);
 
-    header.packet_type = (packet_type_e) tvb_get_bits8(tvb, 0, 4);
-    header.class_id_enable = tvb_get_bits8(tvb, 4, 1);
-    header.tsi = (tsi_e) tvb_get_bits8(tvb, 8, 2);
-    header.tsf = (tsf_e) tvb_get_bits8(tvb, 10, 2);
-    header.packet_size = 4 * tvb_get_bits(tvb, 16, 16, encoding);
+    unpack_header(tvb, 0, &header, encoding);
+    /* Convert packet size from words to bytes */
+    packet_size = header.packet_size * 4;
 
     col_add_str(pinfo->cinfo, COL_INFO, packet_type_str[header.packet_type].strptr);
 
     if (is_data_packet(header.packet_type)) {
         dissect_data_header(tvb, v49d2_tree, offset, encoding);
+        has_trailer = ((data_header_t*)&header)->trailer_included;
     } else if (is_context_packet(header.packet_type)) {
         dissect_context_header(tvb, v49d2_tree, offset, encoding);
     } else if (is_command_packet(header.packet_type)) {
@@ -163,7 +163,7 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
      * Dump the CIF enables for context/command packets. In some cases (like
      * execute ack packets) there may not be any enables.
      */
-    if (!is_data_packet(header.packet_type) && (offset < header.packet_size)) {
+    if (!is_data_packet(header.packet_type) && (offset < packet_size)) {
         dissect_cif0_enables(tvb, v49d2_tree, &cif0, offset, encoding);
         offset += 4;
         if (cif0.cif1_enable) {
@@ -172,19 +172,23 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         }
     }
 
-    payload_size = header.packet_size - offset;
-    /* TODO: if trailer subtract 1 more */
-
+    payload_size = packet_size - offset;
     if (payload_size > 0) {
-        payload_buf = tvb_new_subset_length(tvb, offset, payload_size);
-        payload_item = proto_tree_add_item(tree_item, hf_v49d2_payload, payload_buf, 0, -1, ENC_NA);
+        /* Exclude data packet trailer, if present, from the payload */
+        if (has_trailer) {
+            payload_size -= 4;
+        }
+        payload_item = proto_tree_add_item(tree_item, hf_v49d2_payload, tvb, offset, payload_size, ENC_NA);
         payload_tree = proto_item_add_subtree(payload_item, ett_v49d2_payload);
         if (is_data_packet(header.packet_type)) {
-            proto_tree_add_item(payload_tree, hf_v49d2_data, payload_buf, 0, -1, ENC_NA);
+            proto_tree_add_item(payload_tree, hf_v49d2_data, tvb, offset, payload_size, ENC_NA);
+            if (has_trailer) {
+                dissect_trailer(tvb, v49d2_tree, offset+payload_size, encoding);
+            }
         } else {
-            int sub_offset = dissect_cif0_fields(payload_buf, payload_tree, &cif0, 0, encoding);
+            offset += dissect_cif0_fields(tvb, payload_tree, &cif0, offset, encoding);
             if (cif0.cif1_enable) {
-                sub_offset += dissect_cif1_fields(payload_buf, payload_tree, &cif1, sub_offset, encoding);
+                offset += dissect_cif1_fields(tvb, payload_tree, &cif1, offset, encoding);
             }
         }
     }
@@ -225,7 +229,6 @@ void proto_register_vrtgen(void)
         &ett_v49d2,
         &ett_v49d2_prologue,
         &ett_v49d2_payload,
-        &ett_v49d2_trailer,
     };
 
     proto_vrtgen = proto_register_protocol(
@@ -238,6 +241,7 @@ void proto_register_vrtgen(void)
     proto_register_subtree_array(ett, array_length(ett));
 
     register_prologue(proto_vrtgen);
+    register_trailer(proto_vrtgen);
     register_cif0(proto_vrtgen);
     register_cif1(proto_vrtgen);
 }

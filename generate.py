@@ -29,6 +29,7 @@ from vrtgen.types import control
 from vrtgen.types import enums
 from vrtgen.types import prologue
 from vrtgen.types import struct
+from vrtgen.types import trailer
 
 JINJA_OPTIONS = {
     'line_statement_prefix': '//%',
@@ -133,9 +134,12 @@ class DissectorModule:
             vals = 'VALS({})'.format(c_name(field.type.__name__) + '_str')
         else:
             vals = 'NULL'
+        name = field.name
+        if isinstance(field, struct.Enable):
+            name += ' Enabled'
         self.fields.append({
             'var': var,
-            'name': field.name,
+            'name': name,
             'abbrev': abbrev,
             'type': ftype,
             'base': base,
@@ -164,7 +168,7 @@ class DissectorModule:
         if issubclass(field.type, struct.Struct):
             tree_var = self._add_tree(field.attr)
             dissector['tree'] = tree_var
-            dissector['fields'] = self.process_struct(field.attr, field.type)
+            dissector['fields'] = self._process_struct_fields(field.attr, field.type)
             dissector['struct'] = True
         elif issubclass(field.type, basic.FixedPointType):
             dissector['fixed'] = True
@@ -172,9 +176,11 @@ class DissectorModule:
             dissector['radix'] = field.type.radix
         return dissector
 
-    def process_struct(self, name, structdef):
+    def _process_struct_fields(self, name, structdef):
         dissectors = []
-        for subfield in structdef.get_fields():
+        for subfield in structdef.get_contents():
+            if isinstance(subfield, struct.Reserved):
+                continue
             abbrev = self._get_abbrev(name, subfield.attr)
             hf_name = self._field_name(name, subfield.attr)
             self._add_ws_field(hf_name, subfield, abbrev=abbrev)
@@ -194,26 +200,11 @@ class DissectorModule:
         dissector = self._create_dissector(hf_name, field)
         self.dissectors.append(dissector)
 
-class PrologueModule(DissectorModule):
-    def __init__(self, protocol, name):
-        super().__init__(protocol, name)
-        self.structs = []
-
-    def _add_header_struct(self, name, structdef):
-        fields = []
-        for field in structdef.get_contents():
-            fields.append({
-                'type':'int',
-                'attr':field.attr,
-            })
-        self.structs.append({'name':name, 'fields':fields})
-
-    def process_header(self, name, structdef):
+    def add_struct_tree(self, name, desc, structdef):
         hf_name = self._field_name(name)
-        item_name = 'V49.2 {}'.format(' '.join(split_capitals(structdef.__name__)))
         self.fields.append({
             'var': hf_name,
-            'name': item_name,
+            'name': desc,
             'abbrev': self._get_abbrev(name),
             'type': 'FT_UINT32',
             'base': 'BASE_HEX',
@@ -222,7 +213,7 @@ class PrologueModule(DissectorModule):
         })
 
         dissector = {
-            'var': self._field_name(name),
+            'var': hf_name,
             'name': name,
             'attr': name,
             'size': structdef.bits // 8,
@@ -231,10 +222,30 @@ class PrologueModule(DissectorModule):
         tree_var = self._add_tree(name)
         dissector['tree'] = tree_var
         dissector['struct'] = True
-        dissector['fields'] = self.process_struct(name, structdef)
+        dissector['fields'] = self._process_struct_fields(name, structdef)
 
         self.dissectors.append(dissector)
 
+class PrologueModule(DissectorModule):
+    def __init__(self, protocol, name):
+        super().__init__(protocol, name)
+        self.structs = []
+
+    def _add_header_struct(self, name, structdef):
+        fields = []
+        for field in structdef.get_contents():
+            offset = 31 - field.offset
+            fields.append({
+                'type': 'int',
+                'attr': field.attr,
+                'offset': offset,
+                'bits': field.bits,
+            })
+        self.structs.append({'name':name, 'fields':fields})
+
+    def process_header(self, name, structdef):
+        item_name = 'V49.2 {}'.format(' '.join(split_capitals(structdef.__name__)))
+        self.add_struct_tree(name, item_name, structdef)
         self._add_header_struct(name, structdef)
 
 class CIFModule(DissectorModule):
@@ -343,13 +354,24 @@ class PluginGenerator:
         module.process_field(control.CommandPrologue.message_id)
 
         with open(filename, 'w') as fp:
-            fp.write(template.render(module=module, cif=module))
+            fp.write(template.render(module=module))
+
+    def generate_trailer(self):
+        template = self.env.get_template('trailer.h')
+        filename = 'trailer.h'
+
+        module = DissectorModule(self.protocol, 'trailer')
+        module.add_struct_tree('trailer', 'Trailer', trailer.Trailer)
+
+        with open(filename, 'w') as fp:
+            fp.write(template.render(module=module))
 
     def generate(self):
         self.generate_enums('enums.h')
         self.generate_cif('cif0', cif0, cif0.CIF0)
         self.generate_cif('cif1', cif1, cif1.CIF1)
         self.generate_header()
+        self.generate_trailer()
 
 if __name__ == '__main__':
     generator = PluginGenerator()
