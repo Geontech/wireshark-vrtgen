@@ -62,31 +62,50 @@ def split_capitals(name):
 def c_name(name):
     return '_'.join(split_capitals(name))
 
-def ws_type(dtype):
-    if issubclass(dtype, basic.FixedPointType):
-        if dtype.bits > 32:
+def is_discrete_io(field):
+    return field in (cif1.CIF1.discrete_io_32, cif1.CIF1.discrete_io_64)
+
+def ws_type(field):
+    if issubclass(field.type, basic.FixedPointType):
+        if field.type.bits > 32:
             return 'FT_DOUBLE'
         return 'FT_FLOAT'
-    if issubclass(dtype, (basic.IntegerType, basic.NonZeroSize)):
-        if dtype.signed:
+    if issubclass(field.type, (basic.IntegerType, basic.NonZeroSize)):
+        # Discrete I/O fields are bitfields and should be displayed as hex,
+        # which Wireshark insists must be unsigned (the field types should get
+        # fixed in a future version of vrtgen)
+        if field.type.signed and not is_discrete_io(field):
             sign = ''
         else:
             sign = 'U'
         # Round up to next multiple of 8
-        bits = ((dtype.bits + 7) // 8) * 8
+        bits = ((field.type.bits + 7) // 8) * 8
         return 'FT_{}INT{}'.format(sign, bits)
-    if issubclass(dtype, basic.BooleanType):
+    if issubclass(field.type, basic.BooleanType):
         return 'FT_BOOLEAN'
-    if issubclass(dtype, enums.BinaryEnum):
+    if issubclass(field.type, enums.BinaryEnum):
         return 'FT_UINT32'
     return 'FT_NONE'
 
-def ws_base(dtype):
-    if dtype in (basic.Identifier16, basic.Identifier32, basic.StreamIdentifier, control.MessageIdentifier):
+HEX_TYPES = (
+    basic.Identifier16,
+    basic.Identifier32,
+    basic.StreamIdentifier,
+    control.MessageIdentifier,
+)
+
+DEC_TYPES = (
+    basic.IntegerType,
+    basic.NonZeroSize,
+    enums.BinaryEnum,
+)
+
+def ws_base(field):
+    if is_discrete_io(field):
         return 'BASE_HEX'
-    if issubclass(dtype, (basic.IntegerType, basic.NonZeroSize)):
-        return 'BASE_DEC'
-    if issubclass(dtype, enums.BinaryEnum):
+    if issubclass(field.type, HEX_TYPES):
+        return 'BASE_HEX'
+    if issubclass(field.type, DEC_TYPES):
         return 'BASE_DEC'
     return 'BASE_NONE'
 
@@ -107,9 +126,9 @@ class DissectorModule:
         if abbrev is None:
             abbrev = self._get_abbrev(field.attr)
         if ftype is None:
-            ftype = ws_type(field.type)
+            ftype = ws_type(field)
         if base is None:
-            base = ws_base(field.type)
+            base = ws_base(field)
         if issubclass(field.type, enums.BinaryEnum):
             vals = 'VALS({})'.format(c_name(field.type.__name__) + '_str')
         else:
