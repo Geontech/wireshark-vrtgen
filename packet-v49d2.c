@@ -110,8 +110,8 @@ dissect_v49d2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
     proto_item* tree_item;
     proto_tree *v49d2_tree;
     proto_tree* payload_tree;
-    cif0_enables cif0;
-    cif1_enables cif1;
+    cif0_enables_t cif0;
+    cif1_enables_t cif1;
     int payload_size;
     proto_item* payload_item;
 
@@ -189,10 +189,12 @@ dissect_v49d2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
      * execute ack packets) there may not be any enables.
      */
     if (!is_data_packet(header.packet_type) && (offset < packet_size)) {
-        dissect_cif0_enables(tvb, v49d2_tree, &cif0, offset, encoding);
+        unpack_cif0_enables(tvb, offset, &cif0, encoding);
+        dissect_cif0_enables(tvb, v49d2_tree, offset, encoding);
         offset += 4;
         if (cif0.cif1_enable) {
-            dissect_cif1_enables(tvb, v49d2_tree, &cif1, offset, encoding);
+            unpack_cif1_enables(tvb, offset, &cif1, encoding);
+            dissect_cif1_enables(tvb, v49d2_tree, offset, encoding);
             offset += 4;
         }
     }

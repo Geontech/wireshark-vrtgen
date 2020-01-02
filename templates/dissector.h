@@ -32,7 +32,7 @@ static void register_{{module.name}}(int proto)
     proto_register_field_array(proto, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
 }
-/*%- for struct in module.dissectors if struct.struct %*/
+/*%- for struct in module.dissectors %*/
 
 static int
 dissect_{{struct.attr}}(tvbuff_t *tvb, proto_tree *tree, int offset, guint encoding)
@@ -58,4 +58,21 @@ dissect_{{struct.attr}}(tvbuff_t *tvb, proto_tree *tree, int offset, guint encod
 /*%- endfor %*/
     return {{struct.size}};
 }
+/*%- endfor %*/
+/*%- for struct in module.structs %*/
+
+typedef struct {
+/*%-    for field in struct.fields %*/
+    {{field.type}} {{field.attr}};
+/*%-    endfor %*/
+} {{struct.name}}_t;
+/*%-    if struct.unpack %*/
+
+static void unpack_{{struct.name}}(tvbuff_t *tvb, int offset, {{struct.name}}_t *{{struct.name}}, int encoding)
+{
+/*%-        for field in struct.fields %*/
+    {{struct.name}}->{{field.attr}} = tvb_get_bits(tvb, (offset*8) + {{field.offset}}, {{field.bits}}, encoding);
+/*%-        endfor %*/
+}
+/*%-    endif %*/
 /*%- endfor %*/

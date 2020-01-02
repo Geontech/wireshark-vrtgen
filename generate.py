@@ -139,7 +139,7 @@ class DissectorModule:
         name = field.name
         if isinstance(field, struct.Enable):
             name += ' Enabled'
-        self.fields.append({
+        ws_field = {
             'var': var,
             'name': name,
             'abbrev': abbrev,
@@ -147,7 +147,9 @@ class DissectorModule:
             'base': base,
             'vals': vals,
             'flags': 0,
-        })
+        }
+        self.fields.append(ws_field)
+        return ws_field
 
     def _add_tree(self, *names):
         tree_var = '_'.join(('ett', self.protocol, *names))
@@ -167,11 +169,6 @@ class DissectorModule:
         if field.type.bits % 8:
             dissector['packed'] = True
             dissector['bits'] = field.type.bits
-        if issubclass(field.type, struct.Struct):
-            tree_var = self._add_tree(field.attr)
-            dissector['tree'] = tree_var
-            dissector['fields'] = self._process_struct_fields(field.attr, field.type)
-            dissector['struct'] = True
         elif issubclass(field.type, basic.FixedPointType):
             dissector['fixed'] = True
             dissector['bits'] = field.type.bits
@@ -195,24 +192,41 @@ class DissectorModule:
 
         return dissectors
 
-    def process_field(self, field):
+    def add_field_dissector(self, field):
+        ws_field = self.add_field(field)
+
+        dissector = self._create_dissector(ws_field['var'], field)
+        return dissector
+
+    def add_field(self, field):
         hf_name = self._field_name(field.attr)
-        self._add_ws_field(hf_name, field)
+        return self._add_ws_field(hf_name, field)
 
-        dissector = self._create_dissector(hf_name, field)
-        self.dissectors.append(dissector)
+    def add_dissector(self, field, show_hex=False):
+        return self.add_struct_dissector(field.attr, field.name, field.type, show_hex)
 
-    def add_struct_tree(self, name, desc, structdef):
+    def add_struct_dissector(self, name, desc, structdef, show_hex=False):
         hf_name = self._field_name(name)
-        self.fields.append({
+        if show_hex:
+            ftype = 'FT_UINT{}'.format(structdef.bits)
+            base = 'BASE_HEX'
+        else:
+            ftype = 'FT_NONE'
+            base = 'BASE_NONE'
+
+        ws_field = {
             'var': hf_name,
             'name': desc,
+            'attr': name,
             'abbrev': self._get_abbrev(name),
-            'type': 'FT_UINT32',
-            'base': 'BASE_HEX',
+            'type': ftype,
+            'base': base,
             'vals': 'NULL',
             'flags': 0,
-        })
+            'size': structdef.bits // 8,
+            'struct': True,
+        }
+        self.fields.append(ws_field)
 
         dissector = {
             'var': hf_name,
@@ -223,10 +237,10 @@ class DissectorModule:
 
         tree_var = self._add_tree(name)
         dissector['tree'] = tree_var
-        dissector['struct'] = True
         dissector['fields'] = self._process_struct_fields(name, structdef)
 
         self.dissectors.append(dissector)
+        return ws_field
 
     def add_data_struct(self, name, structdef, unpack=True):
         """
@@ -242,43 +256,6 @@ class DissectorModule:
                 'bits': field.bits,
             })
         self.structs.append({'name':name, 'fields':fields, 'unpack':unpack})
-
-class CIFModule(DissectorModule):
-    def __init__(self, protocol, name, desc):
-        super().__init__(protocol, name)
-        self.enables = []
-
-        # Create a field and subtree for the CIF enables
-        self.enable_index = self._field_name(self.name, 'enables')
-        self.fields.append({
-            'var': self.enable_index,
-            'name': desc,
-            'abbrev': self._get_abbrev(self.name),
-            'type': 'FT_UINT32',
-            'base': 'BASE_HEX',
-            'vals': 'NULL',
-            'flags': 0,
-        })
-        self.tree_index = self._add_tree(self.name)
-
-    def process_enable(self, enable):
-        hf_name = self._field_name(self.name, 'enables', enable.attr)
-        abbrev = self._get_abbrev('enables', enable.attr)
-        self._add_ws_field(hf_name, enable, abbrev=abbrev, ftype='FT_BOOLEAN', base='BASE_NONE')
-
-        offset = 31 - enable.offset
-        self.enables.append({
-            'name': enable.name,
-            'attr': enable.attr,
-            'var': hf_name,
-            'offset': offset,
-        })
-
-    def process_field(self, field):
-        # Skip unimplemented fields and enables
-        if field.type is None or field.type.bits == 1:
-            return
-        super().process_field(field)
 
 class PluginGenerator:
     def __init__(self, protocol='v49d2'):
@@ -325,20 +302,29 @@ class PluginGenerator:
         filename = '{}.h'.format(name)
 
         cif_name = '{} {}'.format(name[:3].upper(), name[3:])
-        module = CIFModule(self.protocol, name, cif_name)
-        for enable in cif_fields.Enables.get_fields():
-            module.process_enable(enable)
+        module = DissectorModule(self.protocol, name)
+        enables = '{}_{}'.format(name, 'enables')
+        module.add_struct_dissector(enables, cif_name, cif_fields.Enables, show_hex=True)
+        module.add_data_struct(enables, cif_fields.Enables)
 
+        cifs = []
         for field in cif_fields.get_fields():
-            module.process_field(field)
+            # Skip unimplemented fields and enables
+            if field.type is None or field.type.bits == 1:
+                continue
+
+            if issubclass(field.type, struct.Struct):
+                cifs.append(module.add_dissector(field))
+            else:
+                cifs.append(module.add_field_dissector(field))
 
         with open(filename, 'w') as fp:
-            fp.write(template.render(module=module, cif=module))
+            fp.write(template.render(module=module, cifs=cifs))
 
     def _process_header(self, module, header, unpack=True):
         name = c_name(header.__name__)
         item_name = 'V49.2 {}'.format(' '.join(split_capitals(header.__name__)))
-        module.add_struct_tree(name, item_name, header)
+        module.add_struct_dissector(name, item_name, header, show_hex=True)
         module.add_data_struct(name, header, unpack)
 
     def generate_header(self):
@@ -351,13 +337,13 @@ class PluginGenerator:
         self._process_header(module, prologue.ContextHeader, unpack=False)
         self._process_header(module, prologue.CommandHeader, unpack=False)
 
-        module.process_field(prologue.Prologue.stream_id)
-        module.process_field(prologue.Prologue.class_id)
-        module.process_field(control.CommandPrologue.cam)
+        module.add_field(prologue.Prologue.stream_id)
+        module.add_dissector(prologue.Prologue.class_id)
+        module.add_dissector(control.CommandPrologue.cam, show_hex=True)
         module.add_data_struct('cam', control.ControlAcknowledgeMode)
-        module.process_field(control.CommandPrologue.message_id)
-        module.process_field(control.CommandPrologue.controllee_id)
-        module.process_field(control.CommandPrologue.controller_id)
+        module.add_field(control.CommandPrologue.message_id)
+        module.add_field(control.CommandPrologue.controllee_id)
+        module.add_field(control.CommandPrologue.controller_id)
 
         with open(filename, 'w') as fp:
             fp.write(template.render(module=module))
@@ -367,7 +353,7 @@ class PluginGenerator:
         filename = 'trailer.h'
 
         module = DissectorModule(self.protocol, 'trailer')
-        module.add_struct_tree('trailer', 'Trailer', trailer.Trailer)
+        module.add_struct_dissector('trailer', 'Trailer', trailer.Trailer, show_hex=True)
 
         with open(filename, 'w') as fp:
             fp.write(template.render(module=module))
