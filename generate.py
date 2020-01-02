@@ -92,6 +92,7 @@ HEX_TYPES = (
     basic.Identifier16,
     basic.Identifier32,
     basic.StreamIdentifier,
+    basic.OUI,
     control.MessageIdentifier,
 )
 
