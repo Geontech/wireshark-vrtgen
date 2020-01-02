@@ -30,7 +30,7 @@ typedef struct {
     {{field.type}} {{field.attr}};
 /*%-    endfor %*/
 } {{struct.name}}_t;
-/*%-    if struct.name == 'header' %*/
+/*%-    if struct.unpack %*/
 
 static void unpack_{{struct.name}}(tvbuff_t *tvb, int offset, {{struct.name}}_t *header, int encoding)
 {

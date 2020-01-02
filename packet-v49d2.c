@@ -41,6 +41,11 @@ static int hf_v49d2_fractional_timestamp = -1;
 static int hf_v49d2_payload = -1;
 static int hf_v49d2_data = -1;
 
+/* Control packet controllee/controller UUID fields are not supported in vrtgen
+ * yet, but we can handle them explicitly here */
+static int hf_v49d2_controllee_uuid = -1;
+static int hf_v49d2_controller_uuid = -1;
+
 static gint ett_v49d2 = -1;
 static gint ett_v49d2_prologue = -1;
 static gint ett_v49d2_payload = -1;
@@ -154,9 +159,29 @@ dissect_v49d2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
     }
 
     if (is_command_packet(header.packet_type)) {
+        cam_t cam;
+        unpack_cam(tvb, offset, &cam, encoding);
         offset += dissect_cam(tvb, v49d2_tree, offset, encoding);
         proto_tree_add_item(v49d2_tree, hf_v49d2_message_id, tvb, offset, 4, encoding);
         offset += 4;
+        if (cam.controllee_enable) {
+            if (cam.controllee_format == IDENTIFIER_FORMAT_WORD) {
+                proto_tree_add_item(v49d2_tree, hf_v49d2_controllee_id, tvb, offset, 4, encoding);
+                offset += 4;
+            } else {
+                proto_tree_add_item(v49d2_tree, hf_v49d2_controllee_uuid, tvb, offset, 16, encoding);
+                offset += 16;
+            }
+        }
+        if (cam.controller_enable) {
+            if (cam.controller_format == IDENTIFIER_FORMAT_WORD) {
+                proto_tree_add_item(v49d2_tree, hf_v49d2_controller_id, tvb, offset, 4, encoding);
+                offset += 4;
+            } else {
+                proto_tree_add_item(v49d2_tree, hf_v49d2_controller_uuid, tvb, offset, 16, encoding);
+                offset += 16;
+            }
+        }
     }
 
     /*
@@ -221,6 +246,18 @@ void proto_register_vrtgen(void)
         { &hf_v49d2_data,
             { "Data", "v49d2.data",
             FT_BYTES, BASE_NONE,
+            NULL, 0x00,
+            NULL, HFILL }
+        },
+        { &hf_v49d2_controllee_uuid,
+            { "Controllee UUID", "v49d2.controllee_id",
+            FT_GUID, BASE_NONE,
+            NULL, 0x00,
+            NULL, HFILL }
+        },
+        { &hf_v49d2_controller_uuid,
+            { "Controller UUID", "v49d2.controller_id",
+            FT_GUID, BASE_NONE,
             NULL, 0x00,
             NULL, HFILL }
         }

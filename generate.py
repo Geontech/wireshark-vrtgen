@@ -120,6 +120,7 @@ class DissectorModule:
         self.fields = []
         self.trees = []
         self.dissectors = []
+        self.structs = []
 
     def _get_abbrev(self, *names):
         return '.'.join((self.protocol, *names))
@@ -227,12 +228,10 @@ class DissectorModule:
 
         self.dissectors.append(dissector)
 
-class PrologueModule(DissectorModule):
-    def __init__(self, protocol, name):
-        super().__init__(protocol, name)
-        self.structs = []
-
-    def _add_header_struct(self, name, structdef):
+    def add_data_struct(self, name, structdef, unpack=True):
+        """
+        Add a structure type to be unpacked from the Wireshark packet buffer.
+        """
         fields = []
         for field in structdef.get_contents():
             offset = 31 - field.offset
@@ -242,12 +241,7 @@ class PrologueModule(DissectorModule):
                 'offset': offset,
                 'bits': field.bits,
             })
-        self.structs.append({'name':name, 'fields':fields})
-
-    def process_header(self, name, structdef):
-        item_name = 'V49.2 {}'.format(' '.join(split_capitals(structdef.__name__)))
-        self.add_struct_tree(name, item_name, structdef)
-        self._add_header_struct(name, structdef)
+        self.structs.append({'name':name, 'fields':fields, 'unpack':unpack})
 
 class CIFModule(DissectorModule):
     def __init__(self, protocol, name, desc):
@@ -341,18 +335,29 @@ class PluginGenerator:
         with open(filename, 'w') as fp:
             fp.write(template.render(module=module, cif=module))
 
+    def _process_header(self, module, header, unpack=True):
+        name = c_name(header.__name__)
+        item_name = 'V49.2 {}'.format(' '.join(split_capitals(header.__name__)))
+        module.add_struct_tree(name, item_name, header)
+        module.add_data_struct(name, header, unpack)
+
     def generate_header(self):
         template = self.env.get_template('prologue.h')
         filename = 'prologue.h'
-        module = PrologueModule(self.protocol, 'prologue')
-        module.process_header('header', prologue.Header)
-        module.process_header('data_header', prologue.DataHeader)
-        module.process_header('context_header', prologue.ContextHeader)
-        module.process_header('command_header', prologue.CommandHeader)
+
+        module = DissectorModule(self.protocol, 'prologue')
+        self._process_header(module, prologue.Header)
+        self._process_header(module, prologue.DataHeader, unpack=False)
+        self._process_header(module, prologue.ContextHeader, unpack=False)
+        self._process_header(module, prologue.CommandHeader, unpack=False)
+
         module.process_field(prologue.Prologue.stream_id)
         module.process_field(prologue.Prologue.class_id)
         module.process_field(control.CommandPrologue.cam)
+        module.add_data_struct('cam', control.ControlAcknowledgeMode)
         module.process_field(control.CommandPrologue.message_id)
+        module.process_field(control.CommandPrologue.controllee_id)
+        module.process_field(control.CommandPrologue.controller_id)
 
         with open(filename, 'w') as fp:
             fp.write(template.render(module=module))
