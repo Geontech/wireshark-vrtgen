@@ -33,8 +33,8 @@ dissect_{{module.name}}_fields(tvbuff_t *tvb, proto_tree *tree, {{module.name}}_
 /*%- endfor %*/
 /*%- for field in cifs %*/
     if (enables->{{field.attr}}) {
-/*%-    if field.struct %*/
-        offset += dissect_{{field.attr}}(tvb, tree, offset, encoding);
+/*%-    if field.dissector %*/
+        offset += {{field.dissector}}(tvb, tree, offset, encoding);
 /*%-    else %*/
 /*%-        if field.size < 4 %*/
         offset += {{4 - field.size}};

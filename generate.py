@@ -125,31 +125,23 @@ class DissectorModule:
     def _get_abbrev(self, *names):
         return '.'.join((self.protocol, *names))
 
-    def _add_ws_field(self, var, field, abbrev=None, ftype=None, base=None):
-        if abbrev is None:
-            abbrev = self._get_abbrev(field.attr)
-        if ftype is None:
-            ftype = ws_type(field)
-        if base is None:
-            base = ws_base(field)
-        if issubclass(field.type, enums.BinaryEnum):
-            vals = 'VALS({})'.format(c_name(field.type.__name__) + '_str')
+    def _create_ws_field(self, attr, name, ftype, base, parent=None):
+        if parent is None:
+            var = self._field_name(attr)
+            abbrev = self._get_abbrev(attr)
         else:
-            vals = 'NULL'
-        name = field.name
-        if isinstance(field, struct.Enable):
-            name += ' Enabled'
-        ws_field = {
+            var = self._field_name(parent, attr)
+            abbrev = self._get_abbrev(parent, attr)
+        return {
+            'attr': attr,
             'var': var,
             'name': name,
             'abbrev': abbrev,
             'type': ftype,
             'base': base,
-            'vals': vals,
+            'vals': 'NULL',
             'flags': 0,
         }
-        self.fields.append(ws_field)
-        return ws_field
 
     def _add_tree(self, *names):
         tree_var = '_'.join(('ett', self.protocol, *names))
@@ -159,54 +151,43 @@ class DissectorModule:
     def _field_name(self, *names):
         return '_'.join(('hf', self.protocol, *names))
 
-    def _create_dissector(self, var, field):
-        dissector = {
-            'var': var,
-            'name': field.name,
-            'attr': field.attr,
-            'size': field.type.bits // 8,
-        }
-        if field.type.bits % 8:
-            dissector['packed'] = True
-            dissector['bits'] = field.type.bits
-        elif issubclass(field.type, basic.FixedPointType):
-            dissector['fixed'] = True
-            dissector['bits'] = field.type.bits
-            dissector['radix'] = field.type.radix
-        return dissector
-
     def _process_struct_fields(self, name, structdef):
-        dissectors = []
+        fields = []
         for subfield in structdef.get_contents():
             if isinstance(subfield, struct.Reserved):
                 continue
-            abbrev = self._get_abbrev(name, subfield.attr)
-            hf_name = self._field_name(name, subfield.attr)
-            self._add_ws_field(hf_name, subfield, abbrev=abbrev)
-            dissector = self._create_dissector(hf_name, subfield)
-            offset = subfield.word * 32 + (31-subfield.offset)
-            dissector['bitoffset'] = offset
-            dissector['offset'] = offset // 8
-            dissectors.append(dissector)
-            offset += structdef.bits / 8
+            field = self.add_field(subfield, parent=name)
+            bit_offset = subfield.word * 32 + (31-subfield.offset)
+            field['bitoffset'] = bit_offset
+            field['offset'] = bit_offset // 8
+            fields.append(field)
 
-        return dissectors
+        return fields
 
-    def add_field_dissector(self, field):
-        ws_field = self.add_field(field)
-
-        dissector = self._create_dissector(ws_field['var'], field)
-        return dissector
-
-    def add_field(self, field):
-        hf_name = self._field_name(field.attr)
-        return self._add_ws_field(hf_name, field)
+    def add_field(self, field, parent=None):
+        ftype = ws_type(field)
+        base = ws_base(field)
+        name = field.name
+        if isinstance(field, struct.Enable):
+            name += ' Enabled'
+        ws_field = self._create_ws_field(field.attr, name, ftype, base, parent=parent)
+        if issubclass(field.type, enums.BinaryEnum):
+            ws_field['vals'] = 'VALS({})'.format(c_name(field.type.__name__) + '_str')
+        ws_field['size'] = field.type.bits // 8
+        if field.type.bits % 8:
+            ws_field['packed'] = True
+            ws_field['bits'] = field.type.bits
+        elif issubclass(field.type, basic.FixedPointType):
+            ws_field['fixed'] = True
+            ws_field['bits'] = field.type.bits
+            ws_field['radix'] = field.type.radix
+        self.fields.append(ws_field)
+        return ws_field
 
     def add_dissector(self, field, show_hex=False):
         return self.add_struct_dissector(field.attr, field.name, field.type, show_hex)
 
-    def add_struct_dissector(self, name, desc, structdef, show_hex=False):
-        hf_name = self._field_name(name)
+    def add_struct_dissector(self, attr, name, structdef, show_hex=False):
         if show_hex:
             ftype = 'FT_UINT{}'.format(structdef.bits)
             base = 'BASE_HEX'
@@ -214,32 +195,20 @@ class DissectorModule:
             ftype = 'FT_NONE'
             base = 'BASE_NONE'
 
-        ws_field = {
-            'var': hf_name,
-            'name': desc,
-            'attr': name,
-            'abbrev': self._get_abbrev(name),
-            'type': ftype,
-            'base': base,
-            'vals': 'NULL',
-            'flags': 0,
-            'size': structdef.bits // 8,
-            'struct': True,
-        }
+        ws_field = self._create_ws_field(attr, name, ftype, base)
+        ws_field['dissector'] = 'dissect_{}'.format(attr)
+        ws_field['size'] = structdef.bits // 8
         self.fields.append(ws_field)
 
         dissector = {
-            'var': hf_name,
-            'name': name,
-            'attr': name,
+            'var': ws_field['var'],
+            'name': attr,
             'size': structdef.bits // 8,
+            'tree': self._add_tree(attr),
+            'fields': self._process_struct_fields(attr, structdef),
         }
-
-        tree_var = self._add_tree(name)
-        dissector['tree'] = tree_var
-        dissector['fields'] = self._process_struct_fields(name, structdef)
-
         self.dissectors.append(dissector)
+
         return ws_field
 
     def add_data_struct(self, name, structdef, unpack=True):
@@ -297,26 +266,27 @@ class PluginGenerator:
             'values': [self._format_enum_value(enum, name, format_string, v) for v in enum],
         }
 
-    def generate_cif(self, name, cif, cif_fields):
+    def generate_cif(self, name, cif):
         template = self.env.get_template('cif.h')
         filename = '{}.h'.format(name)
 
         cif_name = '{} {}'.format(name[:3].upper(), name[3:])
         module = DissectorModule(self.protocol, name)
         enables = '{}_{}'.format(name, 'enables')
-        module.add_struct_dissector(enables, cif_name, cif_fields.Enables, show_hex=True)
-        module.add_data_struct(enables, cif_fields.Enables)
+        module.add_struct_dissector(enables, cif_name, cif.Enables, show_hex=True)
+        module.add_data_struct(enables, cif.Enables)
 
         cifs = []
-        for field in cif_fields.get_fields():
+        for field in cif.get_fields():
             # Skip unimplemented fields and enables
             if field.type is None or field.type.bits == 1:
                 continue
 
             if issubclass(field.type, struct.Struct):
-                cifs.append(module.add_dissector(field))
+                ws_field = module.add_dissector(field)
             else:
-                cifs.append(module.add_field_dissector(field))
+                ws_field = module.add_field(field)
+            cifs.append(ws_field)
 
         with open(filename, 'w') as fp:
             fp.write(template.render(module=module, cifs=cifs))
@@ -360,8 +330,8 @@ class PluginGenerator:
 
     def generate(self):
         self.generate_enums('enums.h')
-        self.generate_cif('cif0', cif0, cif0.CIF0)
-        self.generate_cif('cif1', cif1, cif1.CIF1)
+        self.generate_cif('cif0', cif0.CIF0)
+        self.generate_cif('cif1', cif1.CIF1)
         self.generate_header()
         self.generate_trailer()
 

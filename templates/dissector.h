@@ -35,7 +35,7 @@ static void register_{{module.name}}(int proto)
 /*%- for struct in module.dissectors %*/
 
 static int
-dissect_{{struct.attr}}(tvbuff_t *tvb, proto_tree *tree, int offset, guint encoding)
+dissect_{{struct.name}}(tvbuff_t *tvb, proto_tree *tree, int offset, guint encoding)
 {
     proto_item *item;
     proto_tree *struct_tree;
