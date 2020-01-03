@@ -1,4 +1,4 @@
-#include "fixed.h"
+#include "ext.h"
 
 /* Wireshark fields */
 /*%- for field in module.fields %*/
@@ -39,10 +39,6 @@ dissect_{{struct.name}}(tvbuff_t *tvb, proto_tree *tree, int offset, guint encod
 {
     proto_item *item;
     proto_tree *struct_tree;
-/*%- for field in struct.fields if field.fixed %*/
-    gint{{field.bits}} {{field.attr}}_val;
-/*%- endfor %*/
-
     item = proto_tree_add_item(tree, {{struct.var}}, tvb, offset, {{struct.size}}, ENC_NA);
     struct_tree = proto_item_add_subtree(item, {{struct.tree}});
 
@@ -50,8 +46,7 @@ dissect_{{struct.name}}(tvbuff_t *tvb, proto_tree *tree, int offset, guint encod
 /*%-    if field.packed %*/
     proto_tree_add_bits_item(struct_tree, {{field.var}}, tvb, (offset*8) + {{field.bitoffset}}, {{field.bits}}, encoding);
 /*%-    elif field.fixed %*/
-    {{field.attr}}_val = get_int{{field.bits}}(tvb, {{field.offset}}, encoding);
-    proto_tree_add_double(struct_tree, {{field.var}}, tvb, offset + {{field.offset}}, {{field.size}}, fixed_to_double({{field.attr}}_val, {{field.radix}}));
+    ext_proto_tree_add_fixed(struct_tree, {{field.var}}, tvb, offset, {{field.size}}, {{field.radix}}, encoding);
 /*%-    else %*/
     proto_tree_add_item(struct_tree, {{field.var}}, tvb, offset + {{field.offset}}, {{field.size}}, encoding);
 /*%-    endif %*/

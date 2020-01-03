@@ -24,7 +24,7 @@
 
 #include "moduleinfo.h"
 
-#include "fixed.h"
+#include "ext.h"
 
 #include "enums.h"
 #include "cif0.h"
@@ -145,13 +145,11 @@ dissect_v49d2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
         offset += dissect_class_id(tvb, v49d2_tree, offset, encoding);
     }
     if (header.tsi != TSI_NONE) {
-        proto_item* item = proto_tree_add_item(v49d2_tree, hf_v49d2_integer_timestamp, tvb, offset, 4, encoding);
-        proto_item_append_text(item, " [%s]", tsi_str[header.tsi].strptr);
+        ext_proto_tree_add_int_ts(v49d2_tree, hf_v49d2_integer_timestamp, tvb, offset, header.tsi, encoding);
         offset += 4;
     }
     if (header.tsf != TSI_NONE) {
-        proto_item* item = proto_tree_add_item(v49d2_tree, hf_v49d2_fractional_timestamp, tvb, offset, 8, encoding);
-        proto_item_append_text(item, " [%s]", tsf_str[header.tsf].strptr);
+        ext_proto_tree_add_frac_ts(v49d2_tree, hf_v49d2_fractional_timestamp, tvb, offset, header.tsf, encoding);
         offset += 8;
     }
 
