@@ -309,6 +309,8 @@ class PluginGenerator:
 
         module.add_field(prologue.Prologue.stream_id)
         module.add_dissector(prologue.Prologue.class_id)
+        module.add_field(prologue.Prologue.integer_timestamp)
+        module.add_field(prologue.Prologue.fractional_timestamp)
         module.add_dissector(control.CommandPrologue.cam, show_hex=True)
         module.add_data_struct('cam', control.ControlAcknowledgeMode)
         module.add_field(control.CommandPrologue.message_id)

@@ -36,8 +36,6 @@ const gchar plugin_version[] = VERSION;
 
 static int proto_vrtgen = -1;
 
-static int hf_v49d2_integer_timestamp = -1;
-static int hf_v49d2_fractional_timestamp = -1;
 static int hf_v49d2_payload = -1;
 static int hf_v49d2_data = -1;
 
@@ -47,7 +45,6 @@ static int hf_v49d2_controllee_uuid = -1;
 static int hf_v49d2_controller_uuid = -1;
 
 static gint ett_v49d2 = -1;
-static gint ett_v49d2_prologue = -1;
 static gint ett_v49d2_payload = -1;
 
 /* Some devices are known to ignore the big endian requirement of the spec */
@@ -227,18 +224,6 @@ dissect_v49d2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 void proto_register_vrtgen(void)
 {
     static hf_register_info hf[] = {
-        { &hf_v49d2_integer_timestamp,
-            { "Integer timestamp", "v49d2.integer_timestamp",
-            FT_UINT32, BASE_DEC,
-            NULL, 0x00,
-            NULL, HFILL }
-        },
-        { &hf_v49d2_fractional_timestamp,
-            { "Fractional timestamp", "v49d2.fractional_timestamp",
-            FT_UINT64, BASE_DEC,
-            NULL, 0x00,
-            NULL, HFILL }
-        },
         { &hf_v49d2_payload,
             { "Payload", "v49d2.payload",
             FT_NONE, BASE_NONE,
@@ -267,7 +252,6 @@ void proto_register_vrtgen(void)
 
     static gint* ett[] = {
         &ett_v49d2,
-        &ett_v49d2_prologue,
         &ett_v49d2_payload,
     };
 
