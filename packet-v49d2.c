@@ -190,11 +190,11 @@ dissect_v49d2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
      */
     if (!is_data_packet(header.packet_type) && (offset < packet_size)) {
         unpack_cif0_enables(tvb, offset, &cif0, encoding);
-        dissect_cif0_enables(tvb, v49d2_tree, offset, encoding);
+        dissect_cif0(tvb, v49d2_tree, offset, encoding);
         offset += 4;
         if (cif0.cif1_enable) {
             unpack_cif1_enables(tvb, offset, &cif1, encoding);
-            dissect_cif1_enables(tvb, v49d2_tree, offset, encoding);
+            dissect_cif1(tvb, v49d2_tree, offset, encoding);
             offset += 4;
         }
     }

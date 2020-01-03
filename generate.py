@@ -272,8 +272,8 @@ class PluginGenerator:
 
         cif_name = '{} {}'.format(name[:3].upper(), name[3:])
         module = DissectorModule(self.protocol, name)
+        module.add_struct_dissector(name, cif_name, cif.Enables, show_hex=True)
         enables = '{}_{}'.format(name, 'enables')
-        module.add_struct_dissector(enables, cif_name, cif.Enables, show_hex=True)
         module.add_data_struct(enables, cif.Enables)
 
         cifs = []
