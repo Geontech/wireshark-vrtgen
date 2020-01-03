@@ -19,6 +19,9 @@ enums:
         SAMPLE_COUNT: "Sample count"
         REAL_TIME: "Real time (picoseconds)"
         FREE_RUNNING: "Free-running"
+    TSM:
+        FINE: "Fine"
+        COARSE: "Coarse"
     DataItemFormat:
         SIGNED_FIXED: "Signed Fixed-Point"
         SIGNED_VRT_1: "Signed VRT, 1-bit exponent"
