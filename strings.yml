@@ -19,6 +19,9 @@ enums:
         SAMPLE_COUNT: "Sample count"
         REAL_TIME: "Real time (picoseconds)"
         FREE_RUNNING: "Free-running"
+    TSM:
+        FINE: "Fine"
+        COARSE: "Coarse"
     DataItemFormat:
         SIGNED_FIXED: "Signed Fixed-Point"
         SIGNED_VRT_1: "Signed VRT, 1-bit exponent"
@@ -48,3 +51,18 @@ enums:
         COMPLEX_CARTESIAN: "Complex, Cartesian"
         COMPLEX_POLAR: "Complex, Polar"
         RESERVED: "Reserved"
+    IdentifierFormat:
+        WORD: "Word"
+        UUID: "UUID"
+    ActionMode:
+        NO_ACTION: "No-Action Mode"
+        DRY_RUN: "Dry Run Mode"
+        EXECUTE: "Execute Mode"
+        RESERVED: "Reserved"
+    TimestampControlMode:
+        IGNORE: "Ignore Timestamp"
+        DEVICE: "Timing Precision of Device Execution Only"
+        LATE: "Late and Specified Time Execution"
+        EARLY: "Early and Specified Time Execution"
+        EARLY_LATE: "Permitted Early/Late Timing Execution"
+        default: "Reserved"

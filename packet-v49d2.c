@@ -24,26 +24,28 @@
 
 #include "moduleinfo.h"
 
-#include "fixed.h"
+#include "ext.h"
 
 #include "enums.h"
 #include "cif0.h"
 #include "cif1.h"
 #include "prologue.h"
+#include "trailer.h"
 
 const gchar plugin_version[] = VERSION;
 
 static int proto_vrtgen = -1;
 
-static int hf_v49d2_integer_timestamp = -1;
-static int hf_v49d2_fractional_timestamp = -1;
 static int hf_v49d2_payload = -1;
 static int hf_v49d2_data = -1;
 
+/* Control packet controllee/controller UUID fields are not supported in vrtgen
+ * yet, but we can handle them explicitly here */
+static int hf_v49d2_controllee_uuid = -1;
+static int hf_v49d2_controller_uuid = -1;
+
 static gint ett_v49d2 = -1;
-static gint ett_v49d2_prologue = -1;
 static gint ett_v49d2_payload = -1;
-static gint ett_v49d2_trailer = -1;
 
 /* Some devices are known to ignore the big endian requirement of the spec */
 static guint encoding = ENC_BIG_ENDIAN;
@@ -95,36 +97,40 @@ static int is_command_packet(packet_type_e type)
     }
 }
 
-static int
-dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+static void
+dissect_v49d2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
     int offset = 0;
+    int packet_size;
     header_t header;
+    int has_trailer = 0;
     proto_item* tree_item;
     proto_tree *v49d2_tree;
     proto_tree* payload_tree;
-    cif0_enables cif0;
-    cif1_enables cif1;
+    cif0_enables_t cif0;
+    cif1_enables_t cif1;
     int payload_size;
-    tvbuff_t* payload_buf;
     proto_item* payload_item;
+
+    unpack_header(tvb, 0, &header, encoding);
+    /* Convert packet size from words to bytes */
+    packet_size = header.packet_size * 4;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "VITA 49.2");
     col_clear(pinfo->cinfo, COL_INFO);
+    col_add_str(pinfo->cinfo, COL_INFO, packet_type_str[header.packet_type].strptr);
+
+    if (tree == NULL) {
+        return;
+    }
+    g_print("Dissecting %d\n", packet_size);
 
     tree_item = proto_tree_add_item(tree, proto_vrtgen, tvb, 0, -1, ENC_NA);
     v49d2_tree = proto_item_add_subtree(tree_item, ett_v49d2);
 
-    header.packet_type = (packet_type_e) tvb_get_bits8(tvb, 0, 4);
-    header.class_id_enable = tvb_get_bits8(tvb, 4, 1);
-    header.tsi = (tsi_e) tvb_get_bits8(tvb, 8, 2);
-    header.tsf = (tsf_e) tvb_get_bits8(tvb, 10, 2);
-    header.packet_size = 4 * tvb_get_bits(tvb, 16, 16, encoding);
-
-    col_add_str(pinfo->cinfo, COL_INFO, packet_type_str[header.packet_type].strptr);
-
     if (is_data_packet(header.packet_type)) {
         dissect_data_header(tvb, v49d2_tree, offset, encoding);
+        has_trailer = ((data_header_t*)&header)->trailer_included;
     } else if (is_context_packet(header.packet_type)) {
         dissect_context_header(tvb, v49d2_tree, offset, encoding);
     } else if (is_command_packet(header.packet_type)) {
@@ -143,70 +149,83 @@ dissect_vrtgen(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         offset += dissect_class_id(tvb, v49d2_tree, offset, encoding);
     }
     if (header.tsi != TSI_NONE) {
-        proto_item* item = proto_tree_add_item(v49d2_tree, hf_v49d2_integer_timestamp, tvb, offset, 4, encoding);
-        proto_item_append_text(item, " [%s]", tsi_str[header.tsi].strptr);
+        ext_proto_tree_add_int_ts(v49d2_tree, hf_v49d2_integer_timestamp, tvb, offset, header.tsi, encoding);
         offset += 4;
     }
     if (header.tsf != TSI_NONE) {
-        proto_item* item = proto_tree_add_item(v49d2_tree, hf_v49d2_fractional_timestamp, tvb, offset, 8, encoding);
-        proto_item_append_text(item, " [%s]", tsf_str[header.tsf].strptr);
+        ext_proto_tree_add_frac_ts(v49d2_tree, hf_v49d2_fractional_timestamp, tvb, offset, header.tsf, encoding);
         offset += 8;
     }
 
     if (is_command_packet(header.packet_type)) {
+        cam_t cam;
+        unpack_cam(tvb, offset, &cam, encoding);
         offset += dissect_cam(tvb, v49d2_tree, offset, encoding);
         proto_tree_add_item(v49d2_tree, hf_v49d2_message_id, tvb, offset, 4, encoding);
         offset += 4;
+        if (cam.controllee_enable) {
+            if (cam.controllee_format == IDENTIFIER_FORMAT_WORD) {
+                proto_tree_add_item(v49d2_tree, hf_v49d2_controllee_id, tvb, offset, 4, encoding);
+                offset += 4;
+            } else {
+                proto_tree_add_item(v49d2_tree, hf_v49d2_controllee_uuid, tvb, offset, 16, encoding);
+                offset += 16;
+            }
+        }
+        if (cam.controller_enable) {
+            if (cam.controller_format == IDENTIFIER_FORMAT_WORD) {
+                proto_tree_add_item(v49d2_tree, hf_v49d2_controller_id, tvb, offset, 4, encoding);
+                offset += 4;
+            } else {
+                proto_tree_add_item(v49d2_tree, hf_v49d2_controller_uuid, tvb, offset, 16, encoding);
+                offset += 16;
+            }
+        }
     }
 
     /*
      * Dump the CIF enables for context/command packets. In some cases (like
      * execute ack packets) there may not be any enables.
      */
-    if (!is_data_packet(header.packet_type) && (offset < header.packet_size)) {
-        dissect_cif0_enables(tvb, v49d2_tree, &cif0, offset, encoding);
+    if (!is_data_packet(header.packet_type) && (offset < packet_size)) {
+        unpack_cif0_enables(tvb, offset, &cif0, encoding);
+        dissect_cif0(tvb, v49d2_tree, offset, encoding);
         offset += 4;
         if (cif0.cif1_enable) {
-            dissect_cif1_enables(tvb, v49d2_tree, &cif1, offset, encoding);
+            unpack_cif1_enables(tvb, offset, &cif1, encoding);
+            dissect_cif1(tvb, v49d2_tree, offset, encoding);
             offset += 4;
         }
     }
 
-    payload_size = header.packet_size - offset;
-    /* TODO: if trailer subtract 1 more */
+    payload_size = packet_size - offset;
+    /* Exclude data packet trailer, if present, from the payload */
+    if (has_trailer) {
+        payload_size -= 4;
+    }
 
     if (payload_size > 0) {
-        payload_buf = tvb_new_subset_length(tvb, offset, payload_size);
-        payload_item = proto_tree_add_item(tree_item, hf_v49d2_payload, payload_buf, 0, -1, ENC_NA);
+        payload_item = proto_tree_add_item(tree_item, hf_v49d2_payload, tvb, offset, payload_size, ENC_NA);
         payload_tree = proto_item_add_subtree(payload_item, ett_v49d2_payload);
         if (is_data_packet(header.packet_type)) {
-            proto_tree_add_item(payload_tree, hf_v49d2_data, payload_buf, 0, -1, ENC_NA);
+            proto_tree_add_item(payload_tree, hf_v49d2_data, tvb, offset, payload_size, ENC_NA);
+            offset += payload_size;
         } else {
-            int sub_offset = dissect_cif0_fields(payload_buf, payload_tree, &cif0, 0, encoding);
+            offset += dissect_cif0_fields(tvb, payload_tree, &cif0, offset, encoding);
             if (cif0.cif1_enable) {
-                sub_offset += dissect_cif1_fields(payload_buf, payload_tree, &cif1, sub_offset, encoding);
+                offset += dissect_cif1_fields(tvb, payload_tree, &cif1, offset, encoding);
             }
         }
     }
 
-    return tvb_captured_length(tvb);
+    if (has_trailer) {
+        dissect_trailer(tvb, v49d2_tree, offset, encoding);
+    }
 }
 
 void proto_register_vrtgen(void)
 {
     static hf_register_info hf[] = {
-        { &hf_v49d2_integer_timestamp,
-            { "Integer timestamp", "v49d2.integer_timestamp",
-            FT_UINT32, BASE_DEC,
-            NULL, 0x00,
-            NULL, HFILL }
-        },
-        { &hf_v49d2_fractional_timestamp,
-            { "Fractional timestamp", "v49d2.fractional_timestamp",
-            FT_UINT64, BASE_DEC,
-            NULL, 0x00,
-            NULL, HFILL }
-        },
         { &hf_v49d2_payload,
             { "Payload", "v49d2.payload",
             FT_NONE, BASE_NONE,
@@ -218,14 +237,24 @@ void proto_register_vrtgen(void)
             FT_BYTES, BASE_NONE,
             NULL, 0x00,
             NULL, HFILL }
+        },
+        { &hf_v49d2_controllee_uuid,
+            { "Controllee UUID", "v49d2.controllee_id",
+            FT_GUID, BASE_NONE,
+            NULL, 0x00,
+            NULL, HFILL }
+        },
+        { &hf_v49d2_controller_uuid,
+            { "Controller UUID", "v49d2.controller_id",
+            FT_GUID, BASE_NONE,
+            NULL, 0x00,
+            NULL, HFILL }
         }
     };
 
     static gint* ett[] = {
         &ett_v49d2,
-        &ett_v49d2_prologue,
         &ett_v49d2_payload,
-        &ett_v49d2_trailer,
     };
 
     proto_vrtgen = proto_register_protocol(
@@ -238,6 +267,7 @@ void proto_register_vrtgen(void)
     proto_register_subtree_array(ett, array_length(ett));
 
     register_prologue(proto_vrtgen);
+    register_trailer(proto_vrtgen);
     register_cif0(proto_vrtgen);
     register_cif1(proto_vrtgen);
 }
@@ -246,6 +276,6 @@ void proto_reg_handoff_vrtgen(void)
 {
     static dissector_handle_t vrtgen_handle;
 
-    vrtgen_handle = new_create_dissector_handle(dissect_vrtgen, proto_vrtgen);
+    vrtgen_handle = create_dissector_handle(dissect_v49d2, proto_vrtgen);
     dissector_add_uint("udp.port", 13000, vrtgen_handle);
 }

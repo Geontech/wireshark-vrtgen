@@ -17,7 +17,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 cmake_minimum_required(VERSION 3.13)
-project(wireshark-vrtgen VERSION 0.1.0 LANGUAGES C)
+project(wireshark-vrtgen VERSION 0.2.0 LANGUAGES C)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(WIRESHARK REQUIRED IMPORTED_TARGET "wireshark >= 1.10")
@@ -49,6 +49,7 @@ set(generated_header_files
     ${CMAKE_CURRENT_BINARY_DIR}/cif0.h
     ${CMAKE_CURRENT_BINARY_DIR}/cif1.h
     ${CMAKE_CURRENT_BINARY_DIR}/prologue.h
+    ${CMAKE_CURRENT_BINARY_DIR}/trailer.h
 )
 # List template files used to generate headers, used to trigger a re-generate
 # step if they are modified
@@ -57,6 +58,7 @@ set(template_files
     ${CMAKE_CURRENT_SOURCE_DIR}/templates/dissector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/templates/enums.h
     ${CMAKE_CURRENT_SOURCE_DIR}/templates/prologue.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/templates/trailer.h
 )
 
 add_custom_command(
