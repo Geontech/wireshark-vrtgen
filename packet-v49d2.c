@@ -112,17 +112,21 @@ dissect_v49d2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
     int payload_size;
     proto_item* payload_item;
 
-    col_set_str(pinfo->cinfo, COL_PROTOCOL, "VITA 49.2");
-    col_clear(pinfo->cinfo, COL_INFO);
-
-    tree_item = proto_tree_add_item(tree, proto_vrtgen, tvb, 0, -1, ENC_NA);
-    v49d2_tree = proto_item_add_subtree(tree_item, ett_v49d2);
-
     unpack_header(tvb, 0, &header, encoding);
     /* Convert packet size from words to bytes */
     packet_size = header.packet_size * 4;
 
+    col_set_str(pinfo->cinfo, COL_PROTOCOL, "VITA 49.2");
+    col_clear(pinfo->cinfo, COL_INFO);
     col_add_str(pinfo->cinfo, COL_INFO, packet_type_str[header.packet_type].strptr);
+
+    if (tree == NULL) {
+        return;
+    }
+    g_print("Dissecting %d\n", packet_size);
+
+    tree_item = proto_tree_add_item(tree, proto_vrtgen, tvb, 0, -1, ENC_NA);
+    v49d2_tree = proto_item_add_subtree(tree_item, ett_v49d2);
 
     if (is_data_packet(header.packet_type)) {
         dissect_data_header(tvb, v49d2_tree, offset, encoding);
