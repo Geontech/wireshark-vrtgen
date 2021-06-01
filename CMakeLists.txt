@@ -20,13 +20,20 @@ cmake_minimum_required(VERSION 3.13)
 project(wireshark-vrtgen VERSION 0.2.0 LANGUAGES C)
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(WIRESHARK REQUIRED IMPORTED_TARGET "wireshark >= 1.10")
-set(PLUGINDIR "${WIRESHARK_LIBDIR}/wireshark/plugins/${WIRESHARK_VERSION}")
-message(STATUS "  Plugin directory ${PLUGINDIR}")
-
-find_package(Python3 REQUIRED)
+pkg_check_modules(WIRESHARK REQUIRED IMPORTED_TARGET "wireshark >= 2.6")
+pkg_get_variable(WIRESHARK_PLUGINDIR wireshark plugindir)
+if (WIRESHARK_PLUGINDIR STREQUAL "")
+    set(WIRESHARK_PLUGINDIR "${WIRESHARK_LIBDIR}/wireshark/plugins/${WIRESHARK_VERSION}")
+endif()
+string(REGEX MATCH "[0-9]+\.[0-9]+" WIRESHARK_VERSION_MAJ_MIN "${WIRESHARK_PLUGINDIR}")
+if (WIRESHARK_VERSION_MAJ_MIN STREQUAL "")
+    set(WIRESHARK_VERSION_MAJ_MIN "${WIRESHARK_VERSION}")
+endif()
+message(STATUS "  Plugin directory ${WIRESHARK_PLUGINDIR}")
+message(STATUS "  Plugin being compiled for version ${WIRESHARK_VERSION_MAJ_MIN}")
 
 # Ensure that the base vrtgen Python library is available
+find_package(Python3 REQUIRED)
 execute_process(
     COMMAND ${Python3_EXECUTABLE} -c "import vrtgen"
     OUTPUT_QUIET
@@ -89,6 +96,7 @@ target_link_libraries(v49d2 PRIVATE PkgConfig::WIRESHARK)
 target_include_directories(v49d2 PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${WIRESHARK_INCLUDEDIR}/wireshark
 )
 target_sources(v49d2 PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/packet-v49d2.c
@@ -99,7 +107,7 @@ target_sources(v49d2 PRIVATE
 # Install to the Wireshark plugin directory
 install(TARGETS v49d2
     LIBRARY
-        DESTINATION ${PLUGINDIR}
+        DESTINATION ${WIRESHARK_PLUGINDIR}/epan
         COMPONENT Libraries
 )
 
