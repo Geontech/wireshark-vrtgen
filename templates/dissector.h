@@ -63,7 +63,8 @@ dissect_{{struct.name}}(tvbuff_t *tvb, proto_tree *tree, int offset, guint encod
 
 /*%- for field in struct.fields %*/
 /*%-    if field.packed %*/
-    proto_tree_add_bits_item(struct_tree, {{field.var}}, tvb, (offset*8) + {{field.bitoffset}}, {{field.bits}}, encoding);
+/*%-        set field_offset = 31 - field.bitoffset %*/
+    proto_tree_add_bits_item(struct_tree, {{field.var}}, tvb, (offset*8) + {{field_offset}}, {{field.bits}}, encoding);
 /*%-    elif field.fixed %*/
     ext_proto_tree_add_fixed(struct_tree, {{field.var}}, tvb, offset, {{field.size}}, {{field.radix}}, encoding);
 /*%-    else %*/
@@ -85,7 +86,8 @@ typedef struct {
 static void unpack_{{struct.name}}(tvbuff_t *tvb, int offset, {{struct.name}}_t *{{struct.name}}, int encoding)
 {
 /*%-        for field in struct.fields %*/
-    {{struct.name}}->{{field.attr}} = tvb_get_bits(tvb, (offset*8) + {{field.offset}}, {{field.bits}}, encoding);
+/*%-            set field_offset = 31 - field.offset %*/
+    {{struct.name}}->{{field.attr}} = tvb_get_bits(tvb, (offset*8) + {{field_offset}}, {{field.bits}}, encoding);
 /*%-        endfor %*/
 }
 /*%-    endif %*/
