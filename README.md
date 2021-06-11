@@ -9,7 +9,7 @@ to the Wireshark `plugins` directory.
 
 ## Dependencies
 
-The `v49d2.so` module requires Wireshark 1.10.
+The `v49d2.so` module requires Wireshark and Wireshark development package >= 2.6.
 
 Building the module from source requires CMake 3.14 or newer and Python 3.6 or
 newer with `vrtgen` installed.
@@ -29,12 +29,18 @@ popd
 ```
 
 As long as the `vrtgen` module can be imported by the Python 3 interpreter,
-CMake will detect it and generated the necessary files. To build the project:
+CMake will detect it and generate the necessary files. 
+
+```sh
+python3 -c "import vrtgen; print('vrtgen installed')"
+```
+
+To build the project:
 
 ```sh
 cmake3 -B build
 cd build
-make install
+sudo make install
 ```
 
 ## Usage

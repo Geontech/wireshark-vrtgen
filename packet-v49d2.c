@@ -32,8 +32,6 @@
 #include "prologue.h"
 #include "trailer.h"
 
-const gchar plugin_version[] = VERSION;
-
 static int proto_vrtgen = -1;
 
 static int hf_v49d2_payload = -1;
@@ -97,8 +95,8 @@ static int is_command_packet(packet_type_e type)
     }
 }
 
-static void
-dissect_v49d2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+static int
+dissect_v49d2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, void *data _U_)
 {
     int offset = 0;
     int packet_size;
@@ -121,9 +119,9 @@ dissect_v49d2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
     col_add_str(pinfo->cinfo, COL_INFO, packet_type_str[header.packet_type].strptr);
 
     if (tree == NULL) {
-        return;
+        return 0;
     }
-    g_print("Dissecting %d\n", packet_size);
+    //g_print("Dissecting %d\n", packet_size);
 
     tree_item = proto_tree_add_item(tree, proto_vrtgen, tvb, 0, -1, ENC_NA);
     v49d2_tree = proto_item_add_subtree(tree_item, ett_v49d2);
@@ -221,6 +219,8 @@ dissect_v49d2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
     if (has_trailer) {
         dissect_trailer(tvb, v49d2_tree, offset, encoding);
     }
+
+    return tvb_captured_length(tvb);
 }
 
 void proto_register_vrtgen(void)

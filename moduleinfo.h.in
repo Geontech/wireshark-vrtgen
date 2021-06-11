@@ -7,10 +7,8 @@
 /* Name of package */
 #define PACKAGE "@PROJECT_NAME@"
 
-
-#ifdef VERSION
-#undef VERSION
-#endif
-
 /* Version number of package */
-#define VERSION "@PROJECT_VERSION@"
+#define PLUGIN_VERSION "@PROJECT_VERSION@"
+
+/* Version number of wireshark */
+#cmakedefine WIRESHARK_VERSION_MAJ_MIN "@WIRESHARK_VERSION_MAJ_MIN@"

@@ -157,9 +157,9 @@ class DissectorModule:
             if isinstance(subfield, struct.Reserved):
                 continue
             field = self.add_field(subfield, parent=name)
-            bit_offset = subfield.word * 32 + (31-subfield.offset)
+            bit_offset = subfield.position.bit
             field['bitoffset'] = bit_offset
-            field['offset'] = bit_offset // 8
+            field['offset'] = ((31 - bit_offset) // 8) + (subfield.position.word * 4)
             fields.append(field)
 
         return fields
@@ -217,7 +217,7 @@ class DissectorModule:
         """
         fields = []
         for field in structdef.get_contents():
-            offset = 31 - field.offset
+            offset = 31 - field.position.offset
             fields.append({
                 'type': 'int',
                 'attr': field.attr,
