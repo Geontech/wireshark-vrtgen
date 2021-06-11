@@ -29,7 +29,7 @@ popd
 ```
 
 As long as the `vrtgen` module can be imported by the Python 3 interpreter,
-CMake will detect it and generated the necessary files. 
+CMake will detect it and generate the necessary files. 
 
 ```sh
 python3 -c "import vrtgen; print('vrtgen installed')"
