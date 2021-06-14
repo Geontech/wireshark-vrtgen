@@ -1,5 +1,7 @@
 # VITA 49.2 Wireshark Dissector
 
+> **Note:** You should clone this repository recursively as it contains submodules.
+
 Wireshark plugin for dissecting V49.2 packets. The `vrtgen` data model is used
 to create the packet field accessors. Using this plugin in place of Wireshark's
 built-in dissector allows viewing the contents of context and command packets.
@@ -9,7 +11,7 @@ to the Wireshark `plugins` directory.
 
 ## Dependencies
 
-The `v49d2.so` module requires Wireshark and Wireshark development package >= 2.6.
+The `v49d2.so` module requires Wireshark and Wireshark development packages >= 2.6.
 
 Building the module from source requires CMake 3.14 or newer and Python 3.6 or
 newer with `vrtgen` installed.
